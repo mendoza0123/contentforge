@@ -14,7 +14,11 @@ venv/
 *.sqlite3
 
 # Editors / OS
-.vscode/
+# Shared VS Code setup is committed; everything else there is personal.
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
 .DS_Store
 Thumbs.db
