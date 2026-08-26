@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Calendar — ContentForge{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="flex-between mb-2">
+        <h1>Content Calendar</h1>
+        <button class="btn btn-outline" disabled>+ Add to Calendar</button>
+    </div>
+
+    {% if entries %}
+        <div class="grid-2">
+        {% for entry in entries %}
+        <div class="card">
+            <strong>{{ entry.topic }}</strong>
+            <div class="text-muted text-sm">{{ entry.scheduled_date }}</div>
+            <span class="badge badge-{{ 'success' if entry.status == 'published' else 'info' }}">
+                {{ entry.status }}
+            </span>
+        </div>
+        {% endfor %}
+        </div>
+    {% else %}
+        <div class="card" style="text-align:center; padding:3rem;">
+            <p class="text-muted">No scheduled content yet.</p>
+            <p class="text-muted text-sm">Phase 6 feature — auto-generate a 30-day content calendar.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

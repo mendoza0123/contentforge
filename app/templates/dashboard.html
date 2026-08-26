@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ContentForge{% endblock %}
+{% block content %}
+<div class="container">
+
+    <section class="hero">
+        <div class="grow">
+            <div class="eyebrow">⚡ Content Engine</div>
+            <h1>{{ brand.name if brand else "ContentForge" }}</h1>
+            <div class="sub">{{ brand.niche if brand else "Multi-format content generation" }}</div>
+        </div>
+        <div class="hero-actions">
+            <a href="/content/new" class="btn btn-primary">⚡ Generate content</a>
+        </div>
+    </section>
+
+    <!-- Engine status — the n8n pipeline the client is being pitched -->
+    <div class="card mt-2">
+        <div class="between">
+            <div class="grow">
+                <div class="xs dim mono mb-1">GENERATION ENGINE</div>
+                <div class="rowflex">
+                    {% if engine.mode == 'live' %}
+                    <span class="badge badge-ok"><span class="dot"></span>n8n connected</span>
+                    {% else %}
+                    <span class="badge badge-accent"><span class="dot"></span>Demo mode</span>
+                    {% endif %}
+                    <span class="xs dim">{{ engine.label }}</span>
+                </div>
+            </div>
+            <a href="/settings" class="btn btn-outline btn-sm">Configure</a>
+        </div>
+        <div class="xs dim mt-2">
+            7-pass pipeline · research → outline → draft → SEO audit → AEO FAQ → GEO structuring → metadata
+        </div>
+    </div>
+
+    <div class="stats mt-2">
+        <div class="stat accent">
+            <div class="num">{{ stats.total }}</div>
+            <div class="lbl">Generated</div>
+        </div>
+        <div class="stat">
+            <div class="num">{{ stats.published }}</div>
+            <div class="lbl">Published</div>
+        </div>
+        <div class="stat">
+            <div class="num">{{ stats.formats }}</div>
+            <div class="lbl">Formats</div>
+        </div>
+    </div>
+
+    <div class="section-head">
+        <h2>Recent content</h2>
+        {% if recent_requests %}<span class="more">{{ recent_requests|length }} runs</span>{% endif %}
+    </div>
+
+    <!-- The partial carries its own #recent-list wrapper so hx-swap="outerHTML" replaces it cleanly -->
+    {% include "_recent_list.html" %}
+
+</div>
+{% endblock %}

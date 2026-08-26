@@ -1,0 +1,49 @@
+{#
+  Recent-runs list. Rendered inline by dashboard.html and re-served on its own by
+  GET /partials/recent, so it owns the #recent-list wrapper that HTMX swaps.
+  Polls only while something is still mid-flight, then goes quiet.
+#}
+<div id="recent-list"
+     {% if stats.in_progress %}hx-get="/partials/recent" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
+
+{% if recent_requests %}
+<div class="rowlist">
+    {% for req in recent_requests %}
+    {% set st = req.status or 'pending' %}
+    <a class="row" href="/content/{{ req.request_id }}">
+        <div class="row-top">
+            <div class="row-title grow">{{ req.primary_topic }}</div>
+            {% if st == 'done' %}
+                <span class="badge badge-ok">Done</span>
+            {% elif st == 'failed' %}
+                <span class="badge badge-bad">Failed</span>
+            {% elif st == 'pending' %}
+                <span class="badge badge-neutral">Queued</span>
+            {% else %}
+                <span class="badge badge-run"><span class="dot"></span>{{ st }}</span>
+            {% endif %}
+        </div>
+        <div class="row-meta">
+            <span>{{ req.created_at.strftime('%b %d, %Y · %H:%M') if req.created_at else '' }}</span>
+            {% if req.word_count %}<span class="sep">•</span><span>{{ req.word_count }} words</span>{% endif %}
+            {% if req.formats %}
+                {% set fmts = req.formats|from_json %}
+                {% if fmts %}
+                <span class="sep">•</span>
+                <span>{{ fmts|length }} format{{ '' if fmts|length == 1 else 's' }}</span>
+                {% endif %}
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+    <span class="emoji">⚡</span>
+    <h3>No content yet</h3>
+    <p>Give the engine a topic and it will research keywords, draft the article, and structure it for SEO, AEO, and GEO.</p>
+    <a href="/content/new" class="btn btn-primary">Generate your first piece</a>
+</div>
+{% endif %}
+
+</div>

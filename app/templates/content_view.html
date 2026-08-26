@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}{{ (request_obj.primary_topic or 'Run')|truncate(48) }} — ContentForge{% endblock %}
+{% block content %}
+<div class="container">
+
+    <div class="mb-2">
+        <a href="/dashboard" class="btn btn-ghost btn-sm" style="padding-left:0">← Dashboard</a>
+    </div>
+
+    <div class="card">
+        <div class="row-top">
+            <h1 class="grow" style="font-size:clamp(1.2rem,4.6vw,1.6rem)">{{ request_obj.primary_topic }}</h1>
+            {% if request_obj.status == 'done' %}
+                <span class="badge badge-ok">Done</span>
+            {% elif request_obj.status == 'failed' %}
+                <span class="badge badge-bad">Failed</span>
+            {% else %}
+                <span class="badge badge-run"><span class="dot"></span>{{ request_obj.status }}</span>
+            {% endif %}
+        </div>
+        <div class="row-meta">
+            <span>{{ request_obj.created_at.strftime('%b %d, %Y · %H:%M') if request_obj.created_at else '' }}</span>
+            <span class="sep">•</span>
+            <span class="mono">{{ request_obj.request_id }}</span>
+            {% if request_obj.word_count %}
+            <span class="sep">•</span><span>{{ request_obj.word_count }} words</span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if request_obj.status not in ('done', 'failed') %}
+        {# Still building — poll the run partial until it settles, then HX-Refresh reloads this page #}
+        {% include "_run_status.html" %}
+
+    {% elif request_obj.status == 'failed' %}
+        <div class="alert alert-bad mt-2">
+            <span class="ai">⚠</span>
+            <span>
+                <strong>This run failed.</strong><br>
+                {{ request_obj.error_message or 'No error detail was recorded.' }}
+            </span>
+        </div>
+        <a href="/content/new" class="btn btn-outline btn-block mt-2">Start a new run</a>
+
+    {% elif not items %}
+        <div class="empty mt-2">
+            <span class="emoji">🗂</span>
+            <h3>Nothing stored for this run</h3>
+            <p>The run finished but no generated content was saved against it.</p>
+            <a href="/content/new" class="btn btn-primary">Run it again</a>
+        </div>
+
+    {% else %}
+
+        {# ── Format tabs. Panels are all rendered; JS toggles them so switching is instant offline. ── #}
+        {% if items|length > 1 %}
+        <div class="tabs mt-2" role="tablist">
+            {% for it in items %}
+            <button type="button" class="tab {% if loop.first %}active{% endif %}"
+                    role="tab" data-panel="panel-{{ loop.index }}">
+                {{ {'blog':'📄 Blog','linkedin_carousel':'🎠 LinkedIn','email_newsletter':'✉️ Email'}.get(it.format, it.format) }}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% for it in items %}
+        <section class="panel {% if not loop.first %}hide{% endif %}" id="panel-{{ loop.index }}">
+
+            {% if it.flags %}
+            <div class="alert alert-warn mb-2">
+                <span class="ai">⚑</span>
+                <span><strong>Compliance flags</strong><br>{{ it.flags }}</span>
+            </div>
+            {% endif %}
+
+            <div class="split">
+                <div>
+                    {# ── The generated output ── #}
+                    {% if it.format == 'linkedin_carousel' and it.slides %}
+                        <div class="slides">
+                            {% for s in it.slides %}
+                            <div class="slide">
+                                <div class="sn">{{ '%02d'|format(loop.index) }} / {{ it.slides|length }}</div>
+                                <div class="st">{{ s.title }}</div>
+                                <div class="sb">{{ s.body }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <p class="xs dim mt-1">Swipe to page through the deck.</p>
+                    {% else %}
+                        <article class="article">
+                            {% if it.title %}<h1>{{ it.title }}</h1>{% endif %}
+                            {{ it.body_html|safe }}
+                        </article>
+                    {% endif %}
+
+                    {# ── FAQ (AEO) ── #}
+                    {% if it.faqs %}
+                    <div class="card mt-2">
+                        <div class="xs dim mono mb-2">AEO · FAQ BLOCK</div>
+                        {% for f in it.faqs %}
+                        <div class="faq-item">
+                            <div class="faq-q">{{ f.q }}</div>
+                            <div class="faq-a">{{ f.a }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                {# ── SEO sidebar ── #}
+                <aside class="mt-2">
+                    <div class="card">
+                        <div class="xs dim mono mb-2">SEO METADATA</div>
+                        <div class="metalist">
+                            <div class="metaitem">
+                                <div class="k">Meta title</div>
+                                <div class="v">{{ it.meta_title or '—' }}</div>
+                                {% if it.meta_title %}
+                                <div class="counter {{ 'good' if 50 <= it.meta_title|length <= 60 else 'over' }}">
+                                    {{ it.meta_title|length }} chars · target 50–60
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="metaitem">
+                                <div class="k">Meta description</div>
+                                <div class="v">{{ it.meta_description or '—' }}</div>
+                                {% if it.meta_description %}
+                                <div class="counter {{ 'good' if 150 <= it.meta_description|length <= 160 else 'over' }}">
+                                    {{ it.meta_description|length }} chars · target 150–160
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="metaitem">
+                                <div class="k">Slug</div>
+                                <div class="v mono">/{{ it.slug or '—' }}</div>
+                            </div>
+                            <div class="metaitem">
+                                <div class="k">Status</div>
+                                <div class="v">
+                                    <span class="badge {{ 'badge-ok' if it.status == 'approved' else ('badge-warn' if it.status == 'needs_fix' else 'badge-neutral') }}">
+                                        {{ it.status|replace('_',' ') }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if it.keyword_list %}
+                    <div class="card">
+                        <div class="xs dim mono mb-2">TARGET KEYWORDS</div>
+                        <div class="pill-row">
+                            {% for kw in it.keyword_list %}
+                            <span class="badge badge-neutral" style="text-transform:none">{{ kw }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if it.schema_json %}
+                    <details class="collapse mt-2">
+                        <summary>GEO · JSON-LD schema</summary>
+                        <div class="collapse-body">
+                            <pre class="code">{{ it.schema_json }}</pre>
+                        </div>
+                    </details>
+                    {% endif %}
+
+                    {% if it.image_prompt %}
+                    <details class="collapse">
+                        <summary>Hero image prompt</summary>
+                        <div class="collapse-body">
+                            <p class="small muted">{{ it.image_prompt }}</p>
+                            {% if it.image_alt %}
+                            <p class="xs dim mt-1"><strong>Alt:</strong> {{ it.image_alt }}</p>
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% endif %}
+                </aside>
+            </div>
+        </section>
+        {% endfor %}
+
+        <div class="actionbar">
+            <a href="/content/new" class="btn btn-outline">Regenerate</a>
+            <button type="button" class="btn btn-primary" id="copybtn">Copy HTML</button>
+        </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Tab switching — no round-trip, so it stays instant even on a bad conference network.
+  document.querySelectorAll('.tab[data-panel]').forEach(function (t) {
+    t.addEventListener('click', function () {
+      document.querySelectorAll('.tab[data-panel]').forEach(function (x) { x.classList.remove('active'); });
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.add('hide'); });
+      t.classList.add('active');
+      var el = document.getElementById(t.dataset.panel);
+      if (el) el.classList.remove('hide');
+    });
+  });
+
+  // Copy the visible panel's article HTML.
+  var copybtn = document.getElementById('copybtn');
+  if (copybtn) {
+    copybtn.addEventListener('click', function () {
+      var panel = document.querySelector('.panel:not(.hide)') || document.querySelector('.panel');
+      var art = panel && panel.querySelector('.article');
+      if (!art || !navigator.clipboard) { copybtn.textContent = 'Nothing to copy'; return; }
+      navigator.clipboard.writeText(art.innerHTML).then(function () {
+        copybtn.textContent = 'Copied ✓';
+        setTimeout(function () { copybtn.textContent = 'Copy HTML'; }, 1800);
+      });
+    });
+  }
+</script>
+{% endblock %}

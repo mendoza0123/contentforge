@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Settings — ContentForge{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 700px;">
+    <h1 class="mb-2">Brand Settings</h1>
+
+    {% if brand %}
+    <form class="card" method="POST" action="/settings">
+        {% if saved %}
+        <div class="alert alert-success" style="margin-bottom: 1rem;">✅ Settings saved successfully.</div>
+        {% endif %}
+        <div class="form-group">
+            <label>Brand Name</label>
+            <input type="text" name="name" value="{{ brand.name }}">
+        </div>
+
+        <div class="form-group">
+            <label>Website</label>
+            <input type="url" name="website" value="{{ brand.website or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label>Niche</label>
+            <input type="text" name="niche" value="{{ brand.niche or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label>Brand Voice (LLM prompt)</label>
+            <textarea name="brand_voice" rows="4">{{ brand.brand_voice or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Brand Facts (grounding anchor)</label>
+            <textarea name="brand_facts" rows="8">{{ brand.brand_facts or '' }}</textarea>
+            <div class="text-muted">Quoted verbatim by the LLM. Include products, services, stats, and USPs.</div>
+        </div>
+
+        <div class="form-group">
+            <label>Approved Claims</label>
+            <textarea name="approved_claims" rows="3">{{ brand.approved_claims or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Banned Terms</label>
+            <textarea name="banned_terms" rows="3">{{ brand.banned_terms or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Compliance Rules</label>
+            <textarea name="compliance_rules" rows="6">{{ brand.compliance_rules or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Default Author Bio</label>
+            <textarea name="author_bio" rows="3">{{ brand.author_bio or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Default CTA</label>
+            <input type="text" name="default_cta" value="{{ brand.default_cta or '' }}">
+        </div>
+
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Default Language</label>
+                <select name="default_language">
+                    <option {% if brand.default_language == 'English' %}selected{% endif %}>English</option>
+                    <option {% if brand.default_language == 'Hindi' %}selected{% endif %}>Hindi</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Visual Style (for images)</label>
+                <input type="text" name="visual_style" value="{{ brand.visual_style or '' }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Brand Colors</label>
+            <input type="text" name="brand_colors" value="{{ brand.brand_colors or '' }}">
+        </div>
+
+        <hr style="border-color: var(--border); margin: 1.5rem 0;">
+
+        <h3 class="mb-1" style="color: var(--accent);">🔗 n8n Integration</h3>
+        <div class="form-group">
+            <label>n8n Webhook URL</label>
+            <input type="url" name="n8n_webhook_url" value="{{ brand.n8n_webhook_url or '' }}"
+                   placeholder="https://n8n-your-instance.hstgr.cloud/webhook/ais-technolabs-blog">
+            <div class="text-muted">Paste the n8n trigger webhook URL here. Content requests will be POSTed to this URL to trigger the 7-pass generation pipeline. Leave empty if n8n is not yet deployed — you can set it later.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+    </form>
+    {% else %}
+    <div class="card">
+        <p class="text-muted">No brand configured yet. Seed the database first.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+# Secrets — .env holds real OPENAI_API_KEY / SERPER_API_KEY
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Local database
+*.db
+*.db-journal
+*.sqlite3
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

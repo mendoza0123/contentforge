@@ -1,0 +1,1212 @@
+{
+  "name": "AIS Technolabs \u00b7 Blog Engine \u2014 Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ais-technolabs-blog",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "ais-wf-wh-001",
+      "name": "AIS Technolabs Blog Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -32
+      ],
+      "webhookId": "ais-tech-blog-wh"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"accepted\", \"request_id\": ($json.body && $json.body.request_id) || \"\", \"message\": \"Your AIS content draft is generating \u2014 it will be ready in about 2\u20133 minutes.\" } }}",
+        "options": {}
+      },
+      "id": "ais-wf-ack-001",
+      "name": "Ack (respond now)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$('AIS Technolabs Blog Webhook').item.json.body||{};\nconst marketMap={'India':{code:2356,gl:'in'},'United States':{code:2840,gl:'us'},'United Kingdom':{code:2826,gl:'uk'},'UAE':{code:2784,gl:'ae'},'Canada':{code:2124,gl:'ca'},'Australia':{code:2036,gl:'au'},'Global':{code:2840,gl:'us'}};\nconst m=marketMap[b.target_market]||marketMap['United States'];\nconst wc=(b.word_count||'1200-1800').split('-');\nconst facts=(b.brand_facts||'')+(b.products_to_feature?('\\n\\nProducts to feature (use exact names as written):\\n'+b.products_to_feature):'');\nreturn [{ json:{\n  request_id:b.request_id||('run-'+$execution.id),\n  brand:b.brand||'AIS Technolabs',\n  website:b.website||'https://www.aistechnolabs.com/',\n  niche:b.niche||'iGaming & Casino Software (B2B)',\n  primary_topic:b.primary_topic,\n  location_code:m.code, gl:m.gl, hl:(b.language||'English')==='Hindi'?'hi':'en',\n  brand_voice:b.brand_voice||'', brand_facts:facts,\n  approved_claims:b.approved_claims||'', banned_terms:b.banned_terms||'',\n  author_bio:b.author_bio||'', cta:b.cta||'', compliance:b.compliance_disclaimer||'',\n  wc_min:parseInt(wc[0])||1200, wc_max:parseInt(wc[1])||1800,\n  kw_count:parseInt(b.kw_count)||14, seed_keywords:b.seed_keywords||'',\n  internal_links:b.internal_links||'', publish_target:b.publish_target||'Draft to webhook only',\n  notify_email:b.notify_email||'' } }];"
+      },
+      "id": "ais-wf-norm-001",
+      "name": "Normalize Inputs (Webhook)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://google.serper.dev/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"q\": $json.primary_topic, \"gl\": $json.gl, \"hl\": $json.hl } }}",
+        "options": {}
+      },
+      "id": "ais-wf-serper-001",
+      "name": "Serper \u2014 Search & PAA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        624,
+        -32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "vTbiUiVnusGUpDGT",
+          "name": "Serper"
+        }
+      },
+      "notes": "Uses Serper API key. Pin for testing, unpin for production."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ [ { \"keywords\": ($('Serper \u2014 Search & PAA').item.json.relatedSearches || []).map(r => r.query).concat(($('Normalize Inputs (Webhook)').item.json.seed_keywords || '').split(',').map(s=>s.trim()).filter(Boolean)).slice(0,40), \"location_code\": $('Normalize Inputs (Webhook)').item.json.location_code, \"language_code\": \"en\" } ] }}",
+        "options": {}
+      },
+      "id": "ais-wf-dfs-001",
+      "name": "DataForSEO \u2014 Volume",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        -32
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "kLQvAqkXQznIBJRP",
+          "name": "DATAFORSEO"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "OPTIONAL \u2014 requires $50 DataForSEO top-up. Uses Serper-only if disabled. Set onError=continueRegularOutput so the workflow doesn't break if this fails."
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg=$('Normalize Inputs (Webhook)').item.json;\nconst serper=$('Serper \u2014 Search & PAA').item.json;\nconst dfs=($('DataForSEO \u2014 Volume').item.json?.tasks?.[0]?.result)||[];\nconst vol={}; dfs.forEach(r=>{vol[(r.keyword||'').toLowerCase()]={v:r.search_volume||0,comp:r.competition_index||50};});\nconst pool=new Set();\n(serper.relatedSearches||[]).forEach(r=>pool.add(r.query));\n(serper.peopleAlsoAsk||[]).forEach(r=>pool.add(r.question));\n(cfg.seed_keywords||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(k=>pool.add(k));\nlet scored=[...pool].map(k=>{const mm=vol[k.toLowerCase()]||{v:0,comp:50}; return {kw:k,volume:mm.v,difficulty:mm.comp,score:mm.v/(mm.comp+10)};}).filter(x=>x.kw&&x.kw.length>3);\nscored.sort((a,b)=>b.score-a.score);\nconst top=scored.slice(0,cfg.kw_count);\nconst primary=top.find(t=>t.volume>0)||top[0]||{kw:cfg.primary_topic};\nconst competitors=(serper.organic||[]).slice(0,3).map(o=>({title:o.title,link:o.link,snippet:o.snippet}));\nreturn [{ json:{ primary_keyword:primary.kw, keywords:top.map(k=>k.kw), competitors } }];"
+      },
+      "id": "ais-wf-filter-001",
+      "name": "Filter & Cluster Keywords",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg=$('Normalize Inputs (Webhook)').item.json; const kb=$json;\nreturn [{ json:{ brand:cfg.brand, website:cfg.website, niche:cfg.niche, brand_voice:cfg.brand_voice,\n  brand_facts:cfg.brand_facts, approved_claims:cfg.approved_claims, banned_terms:cfg.banned_terms,\n  author_bio:cfg.author_bio, cta:cfg.cta, compliance:cfg.compliance, internal_links:cfg.internal_links,\n  wc_min:cfg.wc_min, wc_max:cfg.wc_max, primary_keyword:kb.primary_keyword, keywords:kb.keywords,\n  competitors:kb.competitors, publish_target:cfg.publish_target, notify_email:cfg.notify_email } }];"
+      },
+      "id": "ais-wf-asm-001",
+      "name": "Assemble Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'You are an SEO, AEO and GEO content strategist writing for this niche: ' + $('Assemble Context').item.json.niche + '. House structure to follow exactly: 1) Open with a one-sentence bold pull-quote inside a blockquote as the hook. 2) A 3 to 4 paragraph intro that ends with the primary keyword in bold. 3) 4 to 6 H2 sections in a logical arc: Understanding \u2192 Why it matters \u2192 How it works \u2192 deeper H3 sub-sections \u2192 Conclusion. 4) Repeat the primary keyword in most headings and throughout the body. 5) Flowing prose paragraphs, minimal or no bullet lists. 6) Do NOT hand-code a Table of Contents; the CMS builds it from headings. 7) Close with a bold brand pull-quote inside a blockquote that names the brand, links to the brand website, and states the call to action. Return ONLY a JSON object: {\"hook\":\"pull-quote\",\"intro\":\"intro plan\",\"sections\":[{\"h2\":\"...\",\"h3\":[\"...\"],\"key_points\":[\"...\"]}],\"faq_slot\":true,\"disclaimer_slot\":true,\"closing_quote\":\"brand pull-quote\",\"keyword_map\":{ } }. COMPLIANCE (iGaming / Casino Software B2B): Never claim guaranteed revenue, profit, or player acquisition numbers from casino or sportsbook operation. Never claim specific ROI figures. Focus on technology, platform features, and business enablement \u2014 not gambling outcomes. For gambling-related content, include responsible gaming awareness where appropriate. Do not promote gambling to minors or in jurisdictions where it is illegal. Any pricing or timeline must use \"starting at\" or \"typically\" language, never fixed numbers. Product names, features and service descriptions must be taken verbatim from context \u2014 never invented. Voice: ' + $('Assemble Context').item.json.brand_voice + '. Never use these words: ' + $('Assemble Context').item.json.banned_terms }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'PRIMARY KEYWORD: ' + $('Assemble Context').item.json.primary_keyword + '\\nSECONDARY: ' + $('Assemble Context').item.json.keywords.join(', ') + '\\nCOMPETITOR ANGLES (beat, do not copy): ' + JSON.stringify($('Assemble Context').item.json.competitors) + '\\nBRAND & PRODUCT FACTS (ground everything in these):\\n' + $('Assemble Context').item.json.brand_facts }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ais-wf-p1-001",
+      "name": "Pass 1 \u00b7 Outline",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -16,
+        176
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "Select your OpenAI credential after import."
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'Expand the OUTLINE into a full blog article in clean semantic HTML (h1,h2,h3,p,blockquote,strong,em,a). Target ' + $('Assemble Context').item.json.wc_min + ' to ' + $('Assemble Context').item.json.wc_max + ' words. House structure: 1) Open with a one-sentence bold pull-quote inside a blockquote. 2) 3-4 paragraph intro ending with primary keyword in bold. 3) 4-6 H2 sections: Understanding \u2192 Why it matters \u2192 How it works \u2192 H3 subsections \u2192 Conclusion. 4) Repeat primary keyword in headings and body. 5) Flowing prose, minimal bullet lists. 6) No hand-coded TOC. 7) Close with bold brand pull-quote linking to ' + $('Assemble Context').item.json.website + '. CTA: ' + $('Assemble Context').item.json.cta + '. Use brand facts ONLY from context; quote verbatim. COMPLIANCE (iGaming / Casino Software B2B): Never claim guaranteed revenue, profit, player numbers or specific ROI. Focus on technology and platform enablement \u2014 not gambling outcomes. Include responsible gaming awareness where appropriate. Do not promote gambling to minors or illegal jurisdictions. Pricing/timelines use \"starting at\" or \"typically\", never fixed. Any product/service description must be verbatim from context. End with this disclaimer: ' + $('Assemble Context').item.json.compliance + ' Output HTML only \u2014 no markdown, no code fences.' }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'OUTLINE:\\n' + ($('Pass 1 \u00b7 Outline').item.json.choices?.[0]?.message?.content ?? $('Pass 1 \u00b7 Outline').item.json.message?.content ?? $('Pass 1 \u00b7 Outline').item.json.content ?? '') + '\\n\\nBRAND & PRODUCT FACTS:\\n' + $('Assemble Context').item.json.brand_facts }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ais-wf-p2-001",
+      "name": "Pass 2 \u00b7 Draft",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        304,
+        192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'You are a technical SEO editor. Return the corrected full HTML, preserving the house structure (opening pull-quote, H2/H3 arc, closing brand pull-quote, disclaimer). Fix keyword density (~1 to 1.5 percent, natural), ensure one H1 and logical H2/H3 nesting, improve readability, and add 2 to 4 internal links as anchor tags using ONLY these URLs: ' + ($('Assemble Context').item.json.internal_links || '(none provided)') + '. If no URLs are provided, do not add or invent any links \u2014 never use placeholder or example.com URLs. Do not change any fact, price, product name, the pull-quotes or the disclaimer. Return HTML only \u2014 no markdown, no code fences.' }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'DRAFT:\\n' + ($('Pass 2 \u00b7 Draft').item.json.choices?.[0]?.message?.content ?? $('Pass 2 \u00b7 Draft').item.json.message?.content ?? $('Pass 2 \u00b7 Draft').item.json.content ?? '') }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ais-wf-p3-001",
+      "name": "Pass 3 \u00b7 SEO Audit",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        528,
+        192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'You are an answer-engine optimization specialist. Append an FAQ section just before the conclusion and emit schema. Return ONLY JSON: {\"body\":\"the full article HTML with an added FAQ section of 5 to 7 Q and A pairs\",\"faq\":[{\"q\":\"...\",\"a\":\"...\"}],\"faq_schema\":{FAQPage JSON-LD} }. Answers 40 to 60 words, first sentence answers outright. Technology/business framing only (no revenue or profit guarantees). Keep the article, pull-quotes and disclaimer intact.' }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'ARTICLE:\\n' + ($('Pass 3 \u00b7 SEO Audit').item.json.choices?.[0]?.message?.content ?? $('Pass 3 \u00b7 SEO Audit').item.json.message?.content ?? $('Pass 3 \u00b7 SEO Audit').item.json.content ?? '') + '\\n\\nFACTS:\\n' + $('Assemble Context').item.json.brand_facts }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ais-wf-p4-001",
+      "name": "Pass 4 \u00b7 AEO FAQ",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        752,
+        192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'You are a generative-engine optimization strategist (to be cited by ChatGPT, Perplexity, Gemini, Claude). Enhance the ARTICLE: add cite-worthy specific statements, clarify entity relationships, add a short Why Trust Us block using this author bio: ' + $('Assemble Context').item.json.author_bio + '. Authoritative or superlative claims allowed ONLY if present here: ' + $('Assemble Context').item.json.approved_claims + '. Keep the house structure, FAQ, pull-quotes and disclaimer; closing brand pull-quote must link to ' + $('Assemble Context').item.json.website + '. COMPLIANCE (iGaming B2B): Never claim guaranteed revenue/profit/ROI/player numbers. Focus on technology and platform capabilities. Include responsible gaming awareness. Do not promote gambling in illegal jurisdictions. Any pricing uses \"starting at\" or \"typically\". CTA: ' + $('Assemble Context').item.json.cta + '. End body with: ' + $('Assemble Context').item.json.compliance + ' Return full HTML only.' }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'ARTICLE:\\n' + (function(){var s=($('Pass 4 \u00b7 AEO FAQ').item.json.choices?.[0]?.message?.content ?? $('Pass 4 \u00b7 AEO FAQ').item.json.message?.content ?? $('Pass 4 \u00b7 AEO FAQ').item.json.content ?? '');try{var j=JSON.parse(s.replace(/```json|```/g,'').trim());return j.body||s;}catch(e){return s;} })() }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ais-wf-p5-001",
+      "name": "Pass 5 \u00b7 GEO Structuring",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        960,
+        192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'Return ONLY JSON: {\"meta_title\":\"50-60 chars incl. primary keyword\",\"meta_description\":\"150-160 chars incl. primary keyword\",\"slug\":\"lowercase-hyphenated\",\"image_alt\":[\"...\"],\"article_schema\":{BlogPosting JSON-LD, author from the bio} }.' }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'FINAL ARTICLE:\\n' + ($('Pass 5 \u00b7 GEO Structuring').item.json.choices?.[0]?.message?.content ?? $('Pass 5 \u00b7 GEO Structuring').item.json.message?.content ?? $('Pass 5 \u00b7 GEO Structuring').item.json.content ?? '') + '\\nPRIMARY KEYWORD: ' + $('Assemble Context').item.json.primary_keyword }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ais-wf-p6-001",
+      "name": "Pass 6 \u00b7 Metadata",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1184,
+        192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const get=(name)=>{const j=$(name).item.json; return (j.choices?.[0]?.message?.content)??j.message?.content??j.content??'';};\nconst ctx=$('Assemble Context').item.json;\nlet body=get('Pass 5 \u00b7 GEO Structuring');\nbody=body.replace(/^\\s*```(?:html)?\\s*/i,'').replace(/\\s*```\\s*$/,'');\nconst J=s=>{try{return JSON.parse(s.replace(/```json|```/g,'').trim());}catch(e){return null;}};\nconst meta=J(get('Pass 6 \u00b7 Metadata'))||{}; const faq=J(get('Pass 4 \u00b7 AEO FAQ'))||{};\n// force-append the compliance disclaimer if the model dropped it\nconst disc=ctx.compliance||'';\nif(disc && !body.includes(disc.slice(0,30))){ body += '\\n<p class=\"disclaimer\"><em>'+disc+'</em></p>'; }\nconst flags=[];\n(ctx.banned_terms||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(b=>{if(body.toLowerCase().includes(b.toLowerCase()))flags.push('banned:'+b);});\n// iGaming-specific compliance scan: revenue/profit/ROI guarantees, gambling outcome claims\n['guaranteed revenue','guaranteed profit','guaranteed ROI','guaranteed players','cure','cures','treats','permanent','miracle'].forEach(w=>{if(new RegExp('\\\\b'+w.replace(/\\s+/g,'\\\\s+'),'i').test(body))flags.push('compliance:'+w);});\n// Price verification \u2014 flag any $ / \u20b9 / Rs price not in brand_facts\nconst prices=body.match(/(\u20b9|Rs\\.?\\s?|\\$)[0-9,]+/g)||[];\nprices.forEach(p=>{if(!(ctx.brand_facts||'').replace(/\\s/g,'').includes(p.replace(/\\s/g,'')))flags.push('unverified-price:'+p);});\nif(!meta.article_schema)flags.push('schema-missing');\nconst status=flags.length?'NEEDS_FIX':'PENDING_REVIEW';\nreturn [{ json:{ timestamp:new Date().toISOString(), brand:ctx.brand, primary_keyword:ctx.primary_keyword,\n  keywords:(ctx.keywords||[]).join(', '), title:meta.meta_title||ctx.primary_keyword,\n  meta_title:meta.meta_title||'', meta_description:meta.meta_description||'', slug:meta.slug||'',\n  body_html:body, faq_json:JSON.stringify(faq.faq||faq), schema_json:JSON.stringify({article:meta.article_schema,faq:faq.faq_schema}),\n  status, flags:flags.join('; '), publish_target:ctx.publish_target, notify_email:ctx.notify_email,\n  request_id:$('Normalize Inputs (Webhook)').item.json.request_id||'' } }];"
+      },
+      "id": "ais-wf-av-001",
+      "name": "Assemble & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.publish_target }}",
+                    "rightValue": "Shopify",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ais-route-shopify"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.publish_target }}",
+                    "rightValue": "WordPress",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ais-route-wp"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.publish_target }}",
+                    "rightValue": "Webhook",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ais-route-webhook"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "ais-wf-route-001",
+      "name": "Route by Publish Target",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        672,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SHOPIFY_STORE_URL + '/admin/api/2024-01/blogs/' + $env.SHOPIFY_BLOG_ID + '/articles.json' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $env.SHOPIFY_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"article\": { \"title\": $json.title, \"body_html\": $json.body_html, \"handle\": $json.slug, \"published\": false } } }}",
+        "options": {}
+      },
+      "id": "ais-wf-shop-001",
+      "name": "Publish \u2192 Shopify (AIS Blog)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        896,
+        400
+      ],
+      "notes": "Publishes to AIS Technolabs Shopify blog as a draft (published=false) for human review."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WP_BASE_URL + '/wp-json/wp/v2/posts' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WP_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"title\": $json.title, \"content\": $json.body_html, \"slug\": $json.slug, \"status\": \"draft\" } }}",
+        "options": {}
+      },
+      "id": "ais-wf-wp-001",
+      "name": "Publish \u2192 WordPress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        912,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PUBLISH_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "ais-wf-whpub-001",
+      "name": "Publish \u2192 Webhook (ContentForge)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        896,
+        704
+      ],
+      "notes": "POSTs the finished draft JSON to the ContentForge result endpoint. Set PUBLISH_WEBHOOK_URL env var to https://<your-contentforge>/api/v1/webhook/n8n-result"
+    },
+    {
+      "parameters": {},
+      "id": "ais-wf-noop-001",
+      "name": "Draft only (no publish)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "wBBwTctkxDn6PSQH",
+          "cachedResultName": "blog_results"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "request_id",
+              "keyValue": "={{ $('AIS Technolabs Blog Webhook').item.json.body.request_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $('AIS Technolabs Blog Webhook').item.json.body.request_id }}",
+            "status": "={{ $('Assemble & Validate').item.json.status }}",
+            "title": "={{ $('Assemble & Validate').item.json.title }}",
+            "meta_title": "={{ $('Assemble & Validate').item.json.meta_title }}",
+            "meta_description": "={{ $('Assemble & Validate').item.json.meta_description }}",
+            "slug": "={{ $('Assemble & Validate').item.json.slug }}",
+            "body_html": "={{ $('Assemble & Validate').item.json.body_html }}",
+            "faq_json": "={{ $('Assemble & Validate').item.json.faq_json }}",
+            "flags": "={{ $('Assemble & Validate').item.json.flags }}",
+            "primary_keyword": "={{ $('Assemble & Validate').item.json.primary_keyword }}",
+            "image_prompt": "={{ $json.message.content.image_prompt }}",
+            "negative_prompt": "={{ $json.message.content.negative_prompt }}",
+            "image_alt": "={{ $json.message.content.image_alt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "request_id",
+              "displayName": "request_id",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string"
+            },
+            {
+              "id": "meta_title",
+              "displayName": "meta_title",
+              "type": "string"
+            },
+            {
+              "id": "meta_description",
+              "displayName": "meta_description",
+              "type": "string"
+            },
+            {
+              "id": "slug",
+              "displayName": "slug",
+              "type": "string"
+            },
+            {
+              "id": "body_html",
+              "displayName": "body_html",
+              "type": "string"
+            },
+            {
+              "id": "faq_json",
+              "displayName": "faq_json",
+              "type": "string"
+            },
+            {
+              "id": "flags",
+              "displayName": "flags",
+              "type": "string"
+            },
+            {
+              "id": "primary_keyword",
+              "displayName": "primary_keyword",
+              "type": "string"
+            },
+            {
+              "id": "image_prompt",
+              "displayName": "image_prompt",
+              "type": "string"
+            },
+            {
+              "id": "negative_prompt",
+              "displayName": "negative_prompt",
+              "type": "string"
+            },
+            {
+              "id": "image_alt",
+              "displayName": "image_alt",
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ais-wf-saveweb-001",
+      "name": "Save Result for Web",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        736
+      ],
+      "notes": "Upserts the finished draft into the blog_results Data Table (keyed by request_id). Optional \u2014 ContentForge uses the Webhook publish target instead."
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "wBBwTctkxDn6PSQH",
+          "cachedResultName": "blog_results"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $json.request_id }}",
+            "status": "GENERATING",
+            "title": "={{ $json.primary_topic }}",
+            "primary_keyword": "={{ $json.primary_topic }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "request_id",
+              "displayName": "request_id",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string"
+            },
+            {
+              "id": "meta_title",
+              "displayName": "meta_title",
+              "type": "string"
+            },
+            {
+              "id": "meta_description",
+              "displayName": "meta_description",
+              "type": "string"
+            },
+            {
+              "id": "slug",
+              "displayName": "slug",
+              "type": "string"
+            },
+            {
+              "id": "body_html",
+              "displayName": "body_html",
+              "type": "string"
+            },
+            {
+              "id": "faq_json",
+              "displayName": "faq_json",
+              "type": "string"
+            },
+            {
+              "id": "flags",
+              "displayName": "flags",
+              "type": "string"
+            },
+            {
+              "id": "primary_keyword",
+              "displayName": "primary_keyword",
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ais-wf-logreq-001",
+      "name": "Log Request (generating)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        -224
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Inserts a GENERATING placeholder row so the dashboard shows the request immediately. Save Result for Web upserts over this row when complete."
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'You are an art director writing a prompt for a text-to-image model (such as Flux) to create the FEATURED HERO IMAGE for a blog article by ' + $('Assemble Context').item.json.brand + ', a brand in this niche: ' + $('Assemble Context').item.json.niche + '. Based on the article topic, write one vivid, professional, editorial hero-image concept. Aesthetic: professional B2B tech imagery \u2014 dark navy background with subtle geometric patterns, clean minimal composition, blue and orange accent colors, abstract representations of casino/gaming UI elements shown tastefully (no real gambling scenes), tech-forward feel with subtle circuit board or data visualization motifs. 16:9 composition with clear negative space for a title overlay. STRICT RULES: absolutely no text, letters, numbers, logos, watermarks, or brand names anywhere in the image; no real gambling scenes, chips, cash, or people gambling; keep it abstract, tech-focused, and brand-safe. Return ONLY JSON: {\"image_prompt\":\"the full descriptive prompt including subject, style, lighting, lens and composition, ending with: 16:9, photorealistic, high detail\",\"negative_prompt\":\"text, words, watermark, logo, gambling chips, cash, real casino, low quality, blurry\",\"image_alt\":\"a concise, descriptive alt text under 120 characters\"}.' }}",
+              "role": "system"
+            },
+            {
+              "content": "={{ 'ARTICLE TITLE: ' + ($('Assemble & Validate').item.json.title || '') + '\\nPRIMARY KEYWORD: ' + ($('Assemble & Validate').item.json.primary_keyword || '') + '\\nARTICLE EXCERPT: ' + ($('Assemble & Validate').item.json.body_html || '').slice(0,600) }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "temperature": 0.85
+        }
+      },
+      "id": "ais-wf-p7-001",
+      "name": "Pass 7 \u00b7 Image Prompt",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        96,
+        432
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "JoVqA6uJseQYRgiw",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "Reads the finished blog from 'Assemble & Validate' and writes a brand-safe hero-image prompt. Aesthetic: professional B2B tech with casino/gaming motifs shown abstractly."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1jHasgezmCHSl3UZIaA4JHG_s9S7o7U34DhkBsDg1OeE",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "AISTechnolabs",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Assemble & Validate').item.json.timestamp }}",
+            "brand": "={{ $('Assemble & Validate').item.json.brand }}",
+            "primary_keyword": "={{ $('Assemble & Validate').item.json.primary_keyword }}",
+            "keywords": "={{ $('Assemble & Validate').item.json.keywords }}",
+            "title": "={{ $('Assemble & Validate').item.json.title }}",
+            "meta_title": "={{ $('Assemble & Validate').item.json.meta_title }}",
+            "meta_description": "={{ $('Assemble & Validate').item.json.meta_description }}",
+            "slug": "={{ $('Assemble & Validate').item.json.slug }}",
+            "body_html": "={{ $('Assemble & Validate').item.json.body_html }}",
+            "faq_json": "={{ $('Assemble & Validate').item.json.faq_json }}",
+            "schema_json": "={{ $('Assemble & Validate').item.json.schema_json }}",
+            "status": "={{ $('Assemble & Validate').item.json.status }}",
+            "flags": "={{ $('Assemble & Validate').item.json.flags }}",
+            "publish_target": "={{ $('Assemble & Validate').item.json.publish_target }}",
+            "notify_email": "={{ $('Assemble & Validate').item.json.notify_email }}",
+            "Image prompt": "={{ $('Pass 7 \u00b7 Image Prompt').item.json.message.content.image_prompt }}",
+            "Negative prompt": "={{ $('Pass 7 \u00b7 Image Prompt').item.json.message.content.negative_prompt }}",
+            "Image alt": "={{ $('Pass 7 \u00b7 Image Prompt').item.json.message.content.image_alt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "type": "string"
+            },
+            {
+              "id": "brand",
+              "displayName": "brand",
+              "type": "string"
+            },
+            {
+              "id": "primary_keyword",
+              "displayName": "primary_keyword",
+              "type": "string"
+            },
+            {
+              "id": "keywords",
+              "displayName": "keywords",
+              "type": "string"
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string"
+            },
+            {
+              "id": "meta_title",
+              "displayName": "meta_title",
+              "type": "string"
+            },
+            {
+              "id": "meta_description",
+              "displayName": "meta_description",
+              "type": "string"
+            },
+            {
+              "id": "slug",
+              "displayName": "slug",
+              "type": "string"
+            },
+            {
+              "id": "body_html",
+              "displayName": "body_html",
+              "type": "string"
+            },
+            {
+              "id": "faq_json",
+              "displayName": "faq_json",
+              "type": "string"
+            },
+            {
+              "id": "schema_json",
+              "displayName": "schema_json",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "flags",
+              "displayName": "flags",
+              "type": "string"
+            },
+            {
+              "id": "publish_target",
+              "displayName": "publish_target",
+              "type": "string"
+            },
+            {
+              "id": "notify_email",
+              "displayName": "notify_email",
+              "type": "string"
+            },
+            {
+              "id": "Image prompt",
+              "displayName": "Image prompt",
+              "type": "string"
+            },
+            {
+              "id": "Negative prompt",
+              "displayName": "Negative prompt",
+              "type": "string"
+            },
+            {
+              "id": "Image alt",
+              "displayName": "Image alt",
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "ais-wf-sheet-001",
+      "name": "Save to Review Sheet (AISTechnolabs)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        464,
+        480
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "wFmDa15WQx2kUW4v",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Appends to the 'AISTechnolabs' tab. CREATE THIS TAB in your Google Sheet first with the 18 column headers listed in the schema. Blog fields read from 'Assemble & Validate', image fields from 'Pass 7 \u00b7 Image Prompt'."
+    }
+  ],
+  "connections": {
+    "AIS Technolabs Blog Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ack (respond now)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ack (respond now)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Inputs (Webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Inputs (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Serper \u2014 Search & PAA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Request (generating)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Serper \u2014 Search & PAA": {
+      "main": [
+        [
+          {
+            "node": "DataForSEO \u2014 Volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO \u2014 Volume": {
+      "main": [
+        [
+          {
+            "node": "Filter & Cluster Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Cluster Keywords": {
+      "main": [
+        [
+          {
+            "node": "Assemble Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Context": {
+      "main": [
+        [
+          {
+            "node": "Pass 1 \u00b7 Outline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 1 \u00b7 Outline": {
+      "main": [
+        [
+          {
+            "node": "Pass 2 \u00b7 Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 2 \u00b7 Draft": {
+      "main": [
+        [
+          {
+            "node": "Pass 3 \u00b7 SEO Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 3 \u00b7 SEO Audit": {
+      "main": [
+        [
+          {
+            "node": "Pass 4 \u00b7 AEO FAQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 4 \u00b7 AEO FAQ": {
+      "main": [
+        [
+          {
+            "node": "Pass 5 \u00b7 GEO Structuring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 5 \u00b7 GEO Structuring": {
+      "main": [
+        [
+          {
+            "node": "Pass 6 \u00b7 Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 6 \u00b7 Metadata": {
+      "main": [
+        [
+          {
+            "node": "Assemble & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble & Validate": {
+      "main": [
+        [
+          {
+            "node": "Pass 7 \u00b7 Image Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Publish Target": {
+      "main": [
+        [
+          {
+            "node": "Publish \u2192 Shopify (AIS Blog)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish \u2192 WordPress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Publish \u2192 Webhook (ContentForge)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft only (no publish)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Result for Web": {
+      "main": [
+        [
+          {
+            "node": "Save to Review Sheet (AISTechnolabs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass 7 \u00b7 Image Prompt": {
+      "main": [
+        [
+          {
+            "node": "Save Result for Web",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Review Sheet (AISTechnolabs)": {
+      "main": [
+        [
+          {
+            "node": "Route by Publish Target",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "notes": "AIS Technolabs Blog Engine \u2014 adapted from Dhanwantri AyurVaani. 7-pass GPT-4o pipeline. Webhook trigger at /webhook/ais-technolabs-blog. iGaming B2B compliance rules replace AYUSH/Ayurvedic. IMPORTANT: After import, re-select credentials for OpenAI, Serper, DataForSEO, and Google Sheets. The credential IDs in this file reference the Dhanwantri instance. Create an 'AISTechnolabs' tab in your Google Sheet with 18 columns matching the schema. Set PUBLISH_WEBHOOK_URL env var to point to your ContentForge result endpoint.",
+    "instanceId": "ais-technolabs-blog-engine-v1"
+  },
+  "settings": {}
+}

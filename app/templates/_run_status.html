@@ -1,0 +1,46 @@
+{#
+  Live run panel. Rendered inline by content_view.html and re-served by
+  GET /partials/run/{request_id}, which sends HX-Refresh once the run settles.
+#}
+<div id="run-status"
+     hx-get="/partials/run/{{ request_obj.request_id }}"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML">
+
+    <div class="card mt-2">
+        <div class="between mb-1">
+            <strong>{{ progress.note }}</strong>
+            <span class="mono xs dim">{{ progress.pct }}%</span>
+        </div>
+
+        <div class="progress"><i style="width: {{ progress.pct }}%"></i></div>
+
+        <div class="pipeline mt-2">
+            {% for s in progress.steps %}
+            <div class="pstep {{ s.state }}">
+                <span class="pdot">{% if s.state == 'done' %}✓{% else %}{{ loop.index }}{% endif %}</span>
+                <span class="pname">{{ s.name }}</span>
+                {% if s.state == 'active' %}<span class="xs">running…</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <p class="xs dim mt-2">
+            {% if progress.mode == 'live' %}
+                Running on your n8n instance. This page updates itself — you can close it and come back.
+            {% else %}
+                Demo run: replaying a stored generation so the pipeline is visible end to end.
+            {% endif %}
+        </p>
+    </div>
+
+    {# Skeleton of the article that's coming, so the page doesn't look empty while it waits #}
+    <div class="card mt-2" aria-hidden="true">
+        <div class="skel skel-line" style="width:70%; height:20px"></div>
+        <div class="skel skel-line" style="width:100%"></div>
+        <div class="skel skel-line" style="width:96%"></div>
+        <div class="skel skel-line" style="width:88%"></div>
+        <div class="skel skel-line" style="width:92%"></div>
+        <div class="skel skel-line" style="width:60%"></div>
+    </div>
+</div>

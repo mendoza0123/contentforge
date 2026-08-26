@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}New content — ContentForge{% endblock %}
+{% block content %}
+<div class="container narrow">
+
+    <div class="mb-2">
+        <h1>Generate content</h1>
+        <p class="muted small mt-1">
+            One topic in — a researched, compliance-checked content set out.
+        </p>
+    </div>
+
+    {% if brand %}
+    <div class="card mb-2">
+        <div class="between">
+            <div class="grow">
+                <div class="xs dim mono mb-1">BRAND PROFILE</div>
+                <strong>{{ brand.name }}</strong>
+                <div class="xs dim">{{ brand.niche }}</div>
+            </div>
+            <span class="badge badge-accent">Grounded</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-bad mb-2"><span class="ai">⚠</span><span>{{ error }}</span></div>
+    {% endif %}
+
+    <form method="POST" action="/content/new" id="genform">
+
+        <div class="card">
+            <div class="field">
+                <label for="primary_topic">Primary topic <span class="req">*</span></label>
+                <input type="text" id="primary_topic" name="primary_topic" required
+                       placeholder="How to choose the right white-label casino software">
+                <div class="hint">The one thing this piece should rank for.</div>
+            </div>
+
+            <div class="field">
+                <label for="seed_keywords">Seed keywords</label>
+                <input type="text" id="seed_keywords" name="seed_keywords"
+                       placeholder="casino software, white label casino, iGaming platform">
+                <div class="hint">Comma separated. The engine expands and clusters these.</div>
+            </div>
+
+            <div class="field">
+                <label for="products_to_feature">Products to feature</label>
+                <textarea id="products_to_feature" name="products_to_feature" rows="2"
+                          placeholder="White-Label Casino Platform, Crypto Casino Software"></textarea>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="word_count">Length</label>
+                    <select id="word_count" name="word_count">
+                        <option value="1200">1,200 · short</option>
+                        <option value="1500" selected>1,500 · standard</option>
+                        <option value="2000">2,000 · long-form</option>
+                        <option value="2500">2,500 · pillar</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="kw_count">Keywords</label>
+                    <select id="kw_count" name="kw_count">
+                        <option value="5">5</option>
+                        <option value="10" selected>10</option>
+                        <option value="15">15</option>
+                        <option value="20">20</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="target_market">Target market</label>
+                    <select id="target_market" name="target_market">
+                        <option value="United States" selected>United States</option>
+                        <option value="United Kingdom">United Kingdom</option>
+                        <option value="Canada">Canada</option>
+                        <option value="India">India</option>
+                        <option value="UAE">UAE</option>
+                        <option value="Australia">Australia</option>
+                        <option value="Global">Global</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="publish_target">Publish to</label>
+                    <select id="publish_target" name="publish_target">
+                        <option value="Draft only" selected>Draft only</option>
+                        <option value="WordPress">WordPress</option>
+                        <option value="Shopify">Shopify</option>
+                        <option value="Webhook">Webhook</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="field mb-0">
+                <label>Formats <span class="req">*</span></label>
+                <div class="chips">
+                    <label class="chip">
+                        <input type="checkbox" name="formats" value="blog" checked>
+                        <span class="chip-ico">📄</span>
+                        <span class="chip-body">
+                            <span class="chip-name">Blog post</span>
+                            <span class="chip-sub">Full article + schema</span>
+                        </span>
+                        <span class="chip-check">✓</span>
+                    </label>
+                    <label class="chip">
+                        <input type="checkbox" name="formats" value="linkedin_carousel">
+                        <span class="chip-ico">🎠</span>
+                        <span class="chip-body">
+                            <span class="chip-name">LinkedIn carousel</span>
+                            <span class="chip-sub">8-slide deck</span>
+                        </span>
+                        <span class="chip-check">✓</span>
+                    </label>
+                    <label class="chip">
+                        <input type="checkbox" name="formats" value="email_newsletter">
+                        <span class="chip-ico">✉️</span>
+                        <span class="chip-body">
+                            <span class="chip-name">Email newsletter</span>
+                            <span class="chip-sub">Subject + body</span>
+                        </span>
+                        <span class="chip-check">✓</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <details class="collapse mt-2">
+            <summary>Advanced</summary>
+            <div class="collapse-body">
+                <div class="field">
+                    <label for="internal_links">Internal links</label>
+                    <textarea id="internal_links" name="internal_links" rows="3"
+                              placeholder="https://www.aistechnolabs.com/casino-software/&#10;https://www.aistechnolabs.com/sportsbook-software/"></textarea>
+                    <div class="hint">One URL per line. Woven into the draft where relevant.</div>
+                </div>
+                <div class="field mb-0">
+                    <label for="notify_email">Notify on completion</label>
+                    <input type="email" id="notify_email" name="notify_email"
+                           inputmode="email" autocapitalize="none" autocorrect="off"
+                           placeholder="editor@ais-tech.com">
+                </div>
+            </div>
+        </details>
+
+        <div class="card mt-2">
+            <div class="field mb-0">
+                <label>Run mode</label>
+                <div class="segmented">
+                    <label>
+                        <input type="radio" name="run_mode" value="demo" checked>
+                        <span class="seg-name">Demo</span>
+                        <span class="seg-sub">Instant · seeded result</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="run_mode" value="live"
+                               {% if not engine.webhook_url %}disabled{% endif %}>
+                        <span class="seg-name">Live n8n</span>
+                        <span class="seg-sub">
+                            {% if engine.webhook_url %}Real run · 2–4 min{% else %}No webhook set{% endif %}
+                        </span>
+                    </label>
+                </div>
+                <div class="hint">
+                    {% if engine.webhook_url %}
+                        Live posts to your n8n webhook and waits for the callback. Demo replays a stored
+                        run so a pitch never stalls on an API.
+                    {% else %}
+                        Add an n8n webhook URL in <a href="/settings">Settings</a> to enable live runs.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block mt-2" id="submitbtn">
+            ⚡ Generate content
+        </button>
+        <p class="xs dim center mt-1">You'll be taken to the run page to watch it build.</p>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Stop double-taps firing two runs, and make the wait feel intentional.
+  document.getElementById('genform').addEventListener('submit', function () {
+    var b = document.getElementById('submitbtn');
+    b.setAttribute('aria-disabled', 'true');
+    b.textContent = 'Starting the engine…';
+  });
+</script>
+{% endblock %}
