@@ -2,28 +2,51 @@
 {% block title %}Calendar — ContentForge{% endblock %}
 {% block content %}
 <div class="container">
-    <div class="flex-between mb-2">
-        <h1>Content Calendar</h1>
-        <button class="btn btn-outline" disabled>+ Add to Calendar</button>
+
+    <div class="section-head">
+        <h2>Content calendar</h2>
+        {% if entries %}<span class="more">{{ entries|length }} planned</span>{% endif %}
     </div>
 
     {% if entries %}
-        <div class="grid-2">
+    <div class="rowlist">
         {% for entry in entries %}
-        <div class="card">
-            <strong>{{ entry.topic }}</strong>
-            <div class="text-muted text-sm">{{ entry.scheduled_date }}</div>
-            <span class="badge badge-{{ 'success' if entry.status == 'published' else 'info' }}">
-                {{ entry.status }}
-            </span>
+        <div class="row">
+            <div class="row-top">
+                <div class="row-title grow">{{ entry.topic }}</div>
+                {% if entry.status == 'published' %}
+                    <span class="badge badge-ok">Published</span>
+                {% elif entry.status == 'generated' %}
+                    <span class="badge badge-accent">Generated</span>
+                {% elif entry.status == 'skipped' %}
+                    <span class="badge badge-neutral">Skipped</span>
+                {% else %}
+                    <span class="badge badge-neutral">Planned</span>
+                {% endif %}
+            </div>
+            <div class="row-meta">
+                <span>{{ entry.scheduled_date.strftime('%b %d, %Y') if entry.scheduled_date else '' }}</span>
+                {% if entry.formats %}
+                    {% set fmts = entry.formats|from_json %}
+                    {% if fmts %}
+                    <span class="sep">•</span>
+                    <span>{{ fmts|length }} format{{ '' if fmts|length == 1 else 's' }}</span>
+                    {% endif %}
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
-        </div>
+    </div>
     {% else %}
-        <div class="card" style="text-align:center; padding:3rem;">
-            <p class="text-muted">No scheduled content yet.</p>
-            <p class="text-muted text-sm">Phase 6 feature — auto-generate a 30-day content calendar.</p>
-        </div>
+    <div class="empty">
+        <span class="emoji">▦</span>
+        <h3>Nothing scheduled</h3>
+        <p>
+            Planned topics land here so a month of content can be queued in one sitting
+            and generated on its scheduled date.
+        </p>
+        <a href="/content/new" class="btn btn-primary">Generate something now</a>
+    </div>
     {% endif %}
 </div>
 {% endblock %}

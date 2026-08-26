@@ -1,99 +1,155 @@
 {% extends "base.html" %}
 {% block title %}Settings — ContentForge{% endblock %}
 {% block content %}
-<div class="container" style="max-width: 700px;">
-    <h1 class="mb-2">Brand Settings</h1>
+<div class="container narrow">
+
+    <div class="mb-2">
+        <h1>Brand settings</h1>
+        <p class="muted small mt-1">
+            Everything here is fed to the engine on every run — this is what keeps the
+            output on-brand and inside the compliance rules.
+        </p>
+    </div>
+
+    {% if saved %}
+    <div class="alert alert-ok mb-2"><span class="ai">✓</span><span>Settings saved.</span></div>
+    {% endif %}
 
     {% if brand %}
-    <form class="card" method="POST" action="/settings">
-        {% if saved %}
-        <div class="alert alert-success" style="margin-bottom: 1rem;">✅ Settings saved successfully.</div>
-        {% endif %}
-        <div class="form-group">
-            <label>Brand Name</label>
-            <input type="text" name="name" value="{{ brand.name }}">
-        </div>
+    <form method="POST" action="/settings">
 
-        <div class="form-group">
-            <label>Website</label>
-            <input type="url" name="website" value="{{ brand.website or '' }}">
-        </div>
+        <div class="card">
+            <div class="xs dim mono mb-2">IDENTITY</div>
 
-        <div class="form-group">
-            <label>Niche</label>
-            <input type="text" name="niche" value="{{ brand.niche or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label>Brand Voice (LLM prompt)</label>
-            <textarea name="brand_voice" rows="4">{{ brand.brand_voice or '' }}</textarea>
-        </div>
-
-        <div class="form-group">
-            <label>Brand Facts (grounding anchor)</label>
-            <textarea name="brand_facts" rows="8">{{ brand.brand_facts or '' }}</textarea>
-            <div class="text-muted">Quoted verbatim by the LLM. Include products, services, stats, and USPs.</div>
-        </div>
-
-        <div class="form-group">
-            <label>Approved Claims</label>
-            <textarea name="approved_claims" rows="3">{{ brand.approved_claims or '' }}</textarea>
-        </div>
-
-        <div class="form-group">
-            <label>Banned Terms</label>
-            <textarea name="banned_terms" rows="3">{{ brand.banned_terms or '' }}</textarea>
-        </div>
-
-        <div class="form-group">
-            <label>Compliance Rules</label>
-            <textarea name="compliance_rules" rows="6">{{ brand.compliance_rules or '' }}</textarea>
-        </div>
-
-        <div class="form-group">
-            <label>Default Author Bio</label>
-            <textarea name="author_bio" rows="3">{{ brand.author_bio or '' }}</textarea>
-        </div>
-
-        <div class="form-group">
-            <label>Default CTA</label>
-            <input type="text" name="default_cta" value="{{ brand.default_cta or '' }}">
-        </div>
-
-        <div class="grid-2">
-            <div class="form-group">
-                <label>Default Language</label>
-                <select name="default_language">
-                    <option {% if brand.default_language == 'English' %}selected{% endif %}>English</option>
-                    <option {% if brand.default_language == 'Hindi' %}selected{% endif %}>Hindi</option>
-                </select>
+            <div class="field">
+                <label for="name">Brand name</label>
+                <input type="text" id="name" name="name" value="{{ brand.name }}">
             </div>
-            <div class="form-group">
-                <label>Visual Style (for images)</label>
-                <input type="text" name="visual_style" value="{{ brand.visual_style or '' }}">
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="website">Website</label>
+                    <input type="url" id="website" name="website"
+                           inputmode="url" autocapitalize="none" autocorrect="off"
+                           value="{{ brand.website or '' }}">
+                </div>
+                <div class="field">
+                    <label for="niche">Niche</label>
+                    <input type="text" id="niche" name="niche" value="{{ brand.niche or '' }}">
+                </div>
+            </div>
+
+            <div class="field mb-0">
+                <label for="default_cta">Default CTA</label>
+                <input type="text" id="default_cta" name="default_cta"
+                       value="{{ brand.default_cta or '' }}">
+                <div class="hint">Appended to long-form pieces where it fits naturally.</div>
             </div>
         </div>
 
-        <div class="form-group">
-            <label>Brand Colors</label>
-            <input type="text" name="brand_colors" value="{{ brand.brand_colors or '' }}">
+        <div class="card">
+            <div class="xs dim mono mb-2">GROUNDING</div>
+
+            <div class="field">
+                <label for="brand_voice">Brand voice</label>
+                <textarea id="brand_voice" name="brand_voice" rows="4">{{ brand.brand_voice or '' }}</textarea>
+                <div class="hint">Passed to the model as a style instruction on every pass.</div>
+            </div>
+
+            <div class="field">
+                <label for="brand_facts">Brand facts</label>
+                <textarea id="brand_facts" name="brand_facts" rows="8">{{ brand.brand_facts or '' }}</textarea>
+                <div class="hint">
+                    The grounding anchor. Quoted verbatim by the model — products, services,
+                    stats and USPs go here so it never has to invent them.
+                </div>
+            </div>
+
+            <div class="field mb-0">
+                <label for="author_bio">Default author bio</label>
+                <textarea id="author_bio" name="author_bio" rows="3">{{ brand.author_bio or '' }}</textarea>
+            </div>
         </div>
 
-        <hr style="border-color: var(--border); margin: 1.5rem 0;">
+        <div class="card">
+            <div class="xs dim mono mb-2">COMPLIANCE</div>
 
-        <h3 class="mb-1" style="color: var(--accent);">🔗 n8n Integration</h3>
-        <div class="form-group">
-            <label>n8n Webhook URL</label>
-            <input type="url" name="n8n_webhook_url" value="{{ brand.n8n_webhook_url or '' }}"
-                   placeholder="https://n8n-your-instance.hstgr.cloud/webhook/ais-technolabs-blog">
-            <div class="text-muted">Paste the n8n trigger webhook URL here. Content requests will be POSTed to this URL to trigger the 7-pass generation pipeline. Leave empty if n8n is not yet deployed — you can set it later.</div>
+            <div class="field">
+                <label for="approved_claims">Approved claims</label>
+                <textarea id="approved_claims" name="approved_claims" rows="3">{{ brand.approved_claims or '' }}</textarea>
+                <div class="hint">Only these claims may be stated as fact.</div>
+            </div>
+
+            <div class="field">
+                <label for="banned_terms">Banned terms</label>
+                <textarea id="banned_terms" name="banned_terms" rows="3">{{ brand.banned_terms or '' }}</textarea>
+                <div class="hint">Comma separated. The validator flags any draft containing these.</div>
+            </div>
+
+            <div class="field mb-0">
+                <label for="compliance_rules">Compliance rules</label>
+                <textarea id="compliance_rules" name="compliance_rules" rows="6">{{ brand.compliance_rules or '' }}</textarea>
+                <div class="hint">Niche-specific rules — licensing, disclaimers, prohibited framing.</div>
+            </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Save Settings</button>
+        <div class="card">
+            <div class="xs dim mono mb-2">OUTPUT</div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="default_language">Default language</label>
+                    <select id="default_language" name="default_language">
+                        <option {% if brand.default_language == 'English' %}selected{% endif %}>English</option>
+                        <option {% if brand.default_language == 'Hindi' %}selected{% endif %}>Hindi</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="brand_colors">Brand colours</label>
+                    <input type="text" id="brand_colors" name="brand_colors"
+                           value="{{ brand.brand_colors or '' }}">
+                </div>
+            </div>
+
+            <div class="field mb-0">
+                <label for="visual_style">Visual style</label>
+                <input type="text" id="visual_style" name="visual_style"
+                       value="{{ brand.visual_style or '' }}">
+                <div class="hint">Used to build the hero image prompt for each piece.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="between mb-2">
+                <div class="xs dim mono">GENERATION ENGINE</div>
+                {% if engine and engine.mode == 'live' %}
+                <span class="badge badge-ok"><span class="dot"></span>n8n connected</span>
+                {% else %}
+                <span class="badge badge-accent"><span class="dot"></span>Demo only</span>
+                {% endif %}
+            </div>
+
+            <div class="field mb-0">
+                <label for="n8n_webhook_url">n8n webhook URL</label>
+                <input type="url" id="n8n_webhook_url" name="n8n_webhook_url"
+                       inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false"
+                       value="{{ brand.n8n_webhook_url or '' }}"
+                       placeholder="https://your-n8n-instance/webhook/ais-technolabs-blog">
+                <div class="hint">
+                    Content requests are POSTed here to trigger the 7-pass pipeline, which calls
+                    back when the draft is ready. Leave this empty to run demo-only.
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block mt-2">Save settings</button>
     </form>
+
     {% else %}
-    <div class="card">
-        <p class="text-muted">No brand configured yet. Seed the database first.</p>
+    <div class="empty">
+        <span class="emoji">🏷</span>
+        <h3>No brand configured</h3>
+        <p>Start the app once to seed the default brand, then come back.</p>
     </div>
     {% endif %}
 </div>

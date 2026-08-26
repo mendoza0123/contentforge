@@ -1,0 +1,183 @@
+#!/usr/bin/env python
+"""
+Reset the dashboard to a clean, pitch-ready state.
+
+Wipes every content request for the brand and rebuilds a small back catalogue of
+finished runs, so the dashboard has real numbers and the recent list has
+something to click into before anyone types a topic.
+
+    ./scripts/seed_demo.py            # rebuild the AIS Technolabs catalogue
+    ./scripts/seed_demo.py --wipe     # clear it and leave the dashboard empty
+
+Safe to run repeatedly — it always starts from a clean slate.
+"""
+import argparse
+import json
+import os
+import sys
+from datetime import timedelta
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.config import settings  # noqa: E402
+from app.demo import seed_items  # noqa: E402
+from app.models import (  # noqa: E402
+    Brand,
+    ContentRequest,
+    GeneratedContent,
+    generate_uuid,
+    get_session,
+    init_db,
+    utcnow,
+)
+
+BRAND_SLUG = "ais-technolabs"
+
+# (days ago, topic, seed keywords, products, word count, formats, published?)
+CATALOGUE = [
+    (
+        21,
+        "how to choose white label casino software",
+        "white label casino software, casino platform provider, turnkey casino",
+        "White-Label Casino Platform, Casino Game Development",
+        2000,
+        ["blog", "linkedin_carousel", "email_newsletter"],
+        True,
+    ),
+    (
+        14,
+        "crypto casino software development cost",
+        "crypto casino software, bitcoin casino development, web3 gambling platform",
+        "Crypto Casino Software, White-Label Casino Platform",
+        1500,
+        ["blog", "linkedin_carousel"],
+        True,
+    ),
+    (
+        9,
+        "sportsbook software for cricket betting platforms",
+        "cricket betting software, sportsbook platform, sports betting development",
+        "Sports Betting Software, iGaming CRM",
+        2000,
+        ["blog", "email_newsletter"],
+        True,
+    ),
+    (
+        5,
+        "gaming licence options for new operators",
+        "curacao gaming licence, malta gaming authority, kahnawake licence",
+        "Gaming Licensing Assistance",
+        1500,
+        ["blog"],
+        False,
+    ),
+    (
+        2,
+        "sweepstakes casino platforms in the US market",
+        "sweepstakes casino software, social casino platform, US iGaming",
+        "Sweepstakes Casino Software",
+        1200,
+        ["blog", "linkedin_carousel"],
+        False,
+    ),
+]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--wipe",
+        action="store_true",
+        help="clear the catalogue and leave the dashboard empty",
+    )
+    args = parser.parse_args()
+
+    engine = init_db(settings.database_url)
+    db = get_session(engine)()
+
+    try:
+        brand = db.query(Brand).filter(Brand.slug == BRAND_SLUG).first()
+        if not brand:
+            print(f"❌ No brand with slug '{BRAND_SLUG}'. Start the app once to seed it.")
+            return 1
+
+        # Clear everything for this brand, including orphaned content from
+        # earlier manual tests that has no request behind it.
+        request_ids = [
+            r.request_id
+            for r in db.query(ContentRequest).filter(
+                ContentRequest.brand_id == brand.id
+            )
+        ]
+        db.query(GeneratedContent).filter(
+            GeneratedContent.request_id.in_(request_ids)
+        ).delete(synchronize_session=False)
+        db.query(ContentRequest).filter(
+            ContentRequest.brand_id == brand.id
+        ).delete(synchronize_session=False)
+        orphans = (
+            db.query(GeneratedContent)
+            .filter(
+                ~GeneratedContent.request_id.in_(
+                    db.query(ContentRequest.request_id)
+                )
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        print(f"🧹 Cleared {len(request_ids)} request(s) and {orphans} orphaned item(s)")
+
+        if args.wipe:
+            print("✅ Dashboard is empty.")
+            return 0
+
+        now = utcnow()
+        for days, topic, keywords, products, words, formats, published in CATALOGUE:
+            created = now - timedelta(days=days, hours=3)
+            cr = ContentRequest(
+                brand_id=brand.id,
+                request_id=generate_uuid(),
+                primary_topic=topic,
+                seed_keywords=keywords,
+                products_to_feature=products,
+                word_count=words,
+                kw_count=12,
+                formats=json.dumps(formats),
+                target_market="United States",
+                publish_target="Draft only",
+                run_mode="demo",
+                status="done",
+                created_at=created,
+                completed_at=created + timedelta(minutes=3),
+            )
+            db.add(cr)
+            db.flush()
+
+            seed_items(db, cr, brand.id)
+            db.flush()
+
+            for item in db.query(GeneratedContent).filter(
+                GeneratedContent.request_id == cr.request_id
+            ):
+                item.created_at = created + timedelta(minutes=3)
+                if published:
+                    item.status = "published"
+                    item.published_at = created + timedelta(hours=4)
+
+            print(f"   ✅ {topic}  ({', '.join(formats)})")
+
+        db.commit()
+
+        totals = (
+            db.query(GeneratedContent)
+            .filter(GeneratedContent.brand_id == brand.id)
+            .count()
+        )
+        print(f"\n✅ {len(CATALOGUE)} runs · {totals} content items for {brand.name}")
+        return 0
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

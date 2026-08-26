@@ -151,6 +151,23 @@ def check_status(request_id: str, db: Session = Depends(get_db)):
 # n8n Result Receiver — n8n POSTs finished drafts here
 # ═══════════════════════════════════════════════════════════════
 
+# n8n's Assemble & Validate node emits its own status vocabulary. Translate it
+# into the lifecycle the models and templates use.
+_N8N_STATUS = {
+    "PENDING_REVIEW": "draft",
+    "NEEDS_FIX": "needs_fix",
+    "APPROVED": "approved",
+    "PUBLISHED": "published",
+}
+
+
+def _normalize_status(raw) -> str:
+    if not raw:
+        return "draft"
+    key = str(raw).strip()
+    return _N8N_STATUS.get(key.upper(), key.lower())
+
+
 @router.post("/webhook/n8n-result")
 async def receive_n8n_result(request: Request, db: Session = Depends(get_db)):
     """Receives a finished content draft from the n8n workflow's 'Publish → Webhook' node.
@@ -167,6 +184,8 @@ async def receive_n8n_result(request: Request, db: Session = Depends(get_db)):
     request_id = payload.get("request_id")
     if not request_id:
         raise HTTPException(status_code=400, detail="Missing request_id")
+
+    payload["status"] = _normalize_status(payload.get("status"))
 
     # Update the content request status
     cr = db.query(ContentRequest).filter(ContentRequest.request_id == request_id).first()

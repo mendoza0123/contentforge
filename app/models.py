@@ -24,8 +24,10 @@ Base = declarative_base()
 
 def get_engine(database_url: str):
     """Create SQLAlchemy engine with SQLite-specific settings."""
+    # timeout: run threads hold their own connection, so a background write can
+    # land while a request is writing. Wait rather than throw "database is locked".
     connect_args = (
-        {"check_same_thread": False}
+        {"check_same_thread": False, "timeout": 15}
         if database_url.startswith("sqlite")
         else {}
     )
@@ -153,6 +155,9 @@ class ContentRequest(Base):
     formats = Column(Text)                             # JSON: ["blog","linkedin_carousel","email_newsletter"]
     publish_targets = Column(Text)                     # JSON array of publishing_target IDs
     notify_email = Column(String(200))
+    target_market = Column(String(100), default="United States")
+    publish_target = Column(String(50), default="Draft only")   # Shopify / WordPress / Webhook / Draft only
+    run_mode = Column(String(20), default="demo")               # demo / live
 
     # State tracking
     status = Column(String(50), default="pending")     # pending / researching / generating / validating / done / failed
@@ -283,8 +288,36 @@ class AnalyticsSnapshot(Base):
         return f"<AnalyticsSnapshot {self.source}.{self.metric_name}={self.metric_value}>"
 
 
+# Columns added after the first release. SQLite has no online ALTER for these
+# through SQLAlchemy, and the demo DB is long-lived, so add them by hand.
+_ADDED_COLUMNS = {
+    "content_requests": {
+        "target_market": "VARCHAR(100)",
+        "publish_target": "VARCHAR(50)",
+        "run_mode": "VARCHAR(20)",
+    },
+}
+
+
+def _apply_pending_columns(engine):
+    """Add any missing columns to existing tables. No-op on a fresh database."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table, columns in _ADDED_COLUMNS.items():
+            if table not in inspector.get_table_names():
+                continue
+            have = {c["name"] for c in inspector.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in have:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+                    print(f"   ➕ Added column {table}.{name}")
+
+
 def init_db(database_url: str):
-    """Create all tables."""
+    """Create all tables and bring existing ones up to date."""
     engine = get_engine(database_url)
     Base.metadata.create_all(engine)
+    _apply_pending_columns(engine)
     return engine
