@@ -1,0 +1,29 @@
+# ContentForge — Render blueprint
+#
+# Free instances have no persistent disk, so contentforge.db does not survive a
+# restart. That suits a pitch demo: the start command rebuilds the catalogue on
+# every boot, which is the same reset you'd run before a pitch anyway.
+#
+# Free instances also spin down after 15 minutes idle and take ~50s to wake.
+# Open the URL a couple of minutes before a pitch, or switch plan to `starter`.
+services:
+  - name: contentforge
+    type: web
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    # Seeding must never take the service down, so this is `;` and not `&&` —
+    # a dashboard with no catalogue still demos; a dead service does not.
+    startCommand: python scripts/seed_demo.py; uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # The repo default is a placeholder and this repo is public — with it,
+      # anyone could forge a session cookie. Render generates a real one.
+      - key: JWT_SECRET
+        generateValue: true
+      # The startup banner prints emoji and Render's log stream is a pipe,
+      # not a console. Be explicit rather than trusting the container locale.
+      - key: PYTHONIOENCODING
+        value: utf-8

@@ -98,6 +98,16 @@ def main() -> int:
     try:
         brand = db.query(Brand).filter(Brand.slug == BRAND_SLUG).first()
         if not brand:
+            # A fresh deploy has no database at all — Render's free instances
+            # rebuild the filesystem on every boot, so seeding runs before
+            # uvicorn has ever started. Create the brand the app would.
+            from app.main import _seed_database
+
+            _seed_database(get_session(engine)())
+            db.rollback()
+            brand = db.query(Brand).filter(Brand.slug == BRAND_SLUG).first()
+
+        if not brand:
             print(f"❌ No brand with slug '{BRAND_SLUG}'. Start the app once to seed it.")
             return 1
 
