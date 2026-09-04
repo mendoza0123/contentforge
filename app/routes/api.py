@@ -176,14 +176,53 @@ async def receive_n8n_result(request: Request, db: Session = Depends(get_db)):
     meta_description, slug, body_html, faq_json, schema_json, status, flags,
     publish_target, notify_email, image_prompt, negative_prompt, image_alt.
     """
+    # n8n surfaces our response body in the node's error panel, so these say what
+    # to change rather than leaving the operator with "Bad request".
+    raw = await request.body()
     try:
-        payload = await request.json()
+        payload = json.loads(raw)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        seen = raw[:200].decode("utf-8", "replace").strip()
+        if seen.startswith("[object Object]"):
+            detail = (
+                "Body arrived as the literal text '[object Object]'. The callback "
+                "node is putting {{ $json }} in a JSON body field, which coerces "
+                "the object to a string. Send "
+                "{{ JSON.stringify($('Assemble & Validate').item.json) }} instead."
+            )
+        else:
+            detail = f"Body is not JSON. First 200 bytes: {seen!r}"
+        raise HTTPException(status_code=400, detail=detail)
+
+    # A JSON body field handed an already-stringified object arrives double
+    # encoded — JSON containing JSON. Unwrap it rather than failing on a 500.
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail="Body decoded to text, not an object. Send the assembled "
+                       "article, not a string containing it.",
+            )
+
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected a JSON object, got {type(payload).__name__}.",
+        )
 
     request_id = payload.get("request_id")
     if not request_id:
-        raise HTTPException(status_code=400, detail="Missing request_id")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Missing request_id. Keys received: "
+                f"{sorted(payload)[:15]}. If those are a WordPress or Shopify "
+                "reply, the callback node is forwarding the CMS response — "
+                "reference $('Assemble & Validate') explicitly."
+            ),
+        )
 
     payload["status"] = _normalize_status(payload.get("status"))
 
