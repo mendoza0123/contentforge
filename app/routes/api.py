@@ -189,9 +189,30 @@ async def receive_n8n_result(request: Request, db: Session = Depends(get_db)):
 
     # Update the content request status
     cr = db.query(ContentRequest).filter(ContentRequest.request_id == request_id).first()
-    if cr:
-        cr.status = "done"
-        cr.completed_at = datetime.now(timezone.utc)
+    if not cr:
+        # The run this belongs to is gone — the instance restarted while n8n was
+        # working, and a free Render dyno comes back with an empty disk. n8n
+        # spent minutes producing this, so rebuild the request rather than drop
+        # it: without a parent row the content still saves, but the viewer looks
+        # the request up first and bounces to the dashboard, so the piece is
+        # invisible while n8n is told everything went fine.
+        origin = db.query(Brand).filter(Brand.name == payload.get("brand")).first()
+        cr = ContentRequest(
+            brand_id=origin.id if origin else 1,
+            request_id=request_id,
+            primary_topic=(
+                payload.get("primary_keyword") or payload.get("title") or request_id
+            ),
+            formats=json.dumps(["blog"]),
+            run_mode="live",
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(cr)
+        db.flush()
+        print(f"   ♻️  Rebuilt the missing request row for {request_id}")
+
+    cr.status = "done"
+    cr.completed_at = datetime.now(timezone.utc)
 
     # Upsert generated content for blog format
     existing = (

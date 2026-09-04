@@ -90,6 +90,11 @@ def main() -> int:
         action="store_true",
         help="clear the catalogue and leave the dashboard empty",
     )
+    parser.add_argument(
+        "--if-empty",
+        action="store_true",
+        help="seed only a brand with no runs; never delete existing work",
+    )
     args = parser.parse_args()
 
     engine = init_db(settings.database_url)
@@ -110,6 +115,19 @@ def main() -> int:
         if not brand:
             print(f"❌ No brand with slug '{BRAND_SLUG}'. Start the app once to seed it.")
             return 1
+
+        # Boot-time seeding must never destroy a run someone is waiting on. A
+        # live n8n run takes minutes, and this script is the first thing a
+        # restart executes.
+        if args.if_empty:
+            existing = (
+                db.query(ContentRequest)
+                .filter(ContentRequest.brand_id == brand.id)
+                .count()
+            )
+            if existing:
+                print(f"✅ {existing} run(s) already here — leaving them alone.")
+                return 0
 
         # Clear everything for this brand, including orphaned content from
         # earlier manual tests that has no request behind it.
