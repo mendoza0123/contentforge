@@ -238,6 +238,8 @@ async def receive_n8n_result(request: Request, db: Session = Depends(get_db)):
         existing.image_prompt = payload.get("image_prompt", existing.image_prompt)
         existing.negative_prompt = payload.get("negative_prompt", existing.negative_prompt)
         existing.image_alt = payload.get("image_alt", existing.image_alt)
+        existing.published_target = payload.get("publish_target", existing.published_target)
+        existing.published_url = payload.get("published_url") or existing.published_url
         existing.published_at = datetime.now(timezone.utc)
     else:
         brand = db.query(Brand).filter(Brand.name == payload.get("brand")).first()
@@ -258,6 +260,8 @@ async def receive_n8n_result(request: Request, db: Session = Depends(get_db)):
             image_prompt=payload.get("image_prompt"),
             negative_prompt=payload.get("negative_prompt"),
             image_alt=payload.get("image_alt"),
+            published_target=payload.get("publish_target"),
+            published_url=payload.get("published_url"),
             created_at=datetime.now(timezone.utc),
             published_at=datetime.now(timezone.utc),
         )

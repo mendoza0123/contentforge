@@ -214,6 +214,8 @@ class GeneratedContent(Base):
     review_notes = Column(Text)
     created_at = Column(DateTime, default=utcnow)
     published_at = Column(DateTime)
+    published_target = Column(String(50))   # WordPress / Shopify / Webhook
+    published_url = Column(Text)            # live post URL the CMS handed back
 
     # Relationships
     request = relationship("ContentRequest", back_populates="generated_content")
@@ -295,6 +297,10 @@ _ADDED_COLUMNS = {
         "target_market": "VARCHAR(100)",
         "publish_target": "VARCHAR(50)",
         "run_mode": "VARCHAR(20)",
+    },
+    "generated_content": {
+        "published_target": "VARCHAR(50)",
+        "published_url": "TEXT",
     },
 }
 

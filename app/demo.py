@@ -173,9 +173,6 @@ PUBLISH_TARGETS = {
     "Shopify": "Shopify",
 }
 
-# Publish branches that end at n8n and never call ContentForge back.
-NO_CALLBACK_TARGETS = ("WordPress", "Shopify")
-
 def build_payload(brand, cr: ContentRequest) -> dict:
     """Body for POST {brand.n8n_webhook_url}.
 

@@ -28,6 +28,23 @@
         </div>
     </div>
 
+    {# A CMS branch publishes at n8n's end, so this banner is the only proof in
+       the dashboard that the post actually went live. #}
+    {% set shipped = (items or []) | selectattr('published_target', 'in', ['WordPress', 'Shopify']) | list %}
+    {% if shipped %}
+    <div class="alert alert-ok mt-2">
+        <span class="ai">✓</span>
+        <span>
+            <strong>Published to {{ shipped[0].published_target }}.</strong>
+            {% if shipped[0].published_url %}
+            <br><a href="{{ shipped[0].published_url }}" target="_blank" rel="noopener">View the live post →</a>
+            {% else %}
+            <br>n8n reported success but sent no post URL back.
+            {% endif %}
+        </span>
+    </div>
+    {% endif %}
+
     {% if request_obj.status not in ('done', 'failed') %}
         {# Still building — poll the run partial until it settles, then HX-Refresh reloads this page #}
         {% include "_run_status.html" %}
