@@ -510,14 +510,17 @@ def _slides(topic: str, brand) -> list:
     t = _title_of(topic)
     brand_name = brand.name if brand else "We"
     return [
+        # No numbers in the titles — the card prints its own "03 / 8" counter,
+        # and a hand-written one beside it only ever disagrees. The cover is
+        # slide 1, so every title here was already off by one.
         {"title": t, "body": "A 7-point evaluation framework for operators and technology buyers."},
-        {"title": "1 · Start with ownership", "body": "Do you keep the source, the IP and the revenue — or are you renting the platform forever?"},
-        {"title": "2 · Time to launch", "body": "Weeks or quarters? Ask for named milestones, not a range."},
-        {"title": "3 · Compliance first", "body": "Confirm which jurisdictions are supported out of the box, and what each extra one costs."},
-        {"title": "4 · Integrations", "body": "Payments, KYC, analytics, CRM. Documented and versioned — or it is a services line item in disguise."},
-        {"title": "5 · Support model", "body": "Who is on the hook at 2am in your busiest market? Get the SLA in writing."},
-        {"title": "6 · Model three years", "body": "Revenue share compounds. The cheap option at launch is often the expensive one at scale."},
-        {"title": "7 · The bottom line", "body": f"Decide what you cannot compromise on — speed, cost or control. {brand_name} can walk you through the trade-offs."},
+        {"title": "Start with ownership", "body": "Do you keep the source, the IP and the revenue — or are you renting the platform forever?"},
+        {"title": "Time to launch", "body": "Weeks or quarters? Ask for named milestones, not a range."},
+        {"title": "Compliance first", "body": "Confirm which jurisdictions are supported out of the box, and what each extra one costs."},
+        {"title": "Integrations", "body": "Payments, KYC, analytics, CRM. Documented and versioned — or it is a services line item in disguise."},
+        {"title": "Support model", "body": "Who is on the hook at 2am in your busiest market? Get the SLA in writing."},
+        {"title": "Model three years", "body": "Revenue share compounds. The cheap option at launch is often the expensive one at scale."},
+        {"title": "The bottom line", "body": f"Decide what you cannot compromise on — speed, cost or control. {brand_name} can walk you through the trade-offs."},
     ]
 
 
