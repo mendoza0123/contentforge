@@ -10,6 +10,7 @@ python-multipart==0.0.28
 openai==2.36.0
 python-dotenv==1.2.2
 httpx==0.28.1
+psycopg[binary]==3.3.5  # Postgres (Neon) — hosts with no persistent disk need a shared DB
 python-jose[cryptography]==3.5.0
 passlib==1.7.4
 bcrypt==3.2.2          # passlib 1.7.4 reads bcrypt.__about__, dropped in bcrypt 4.x

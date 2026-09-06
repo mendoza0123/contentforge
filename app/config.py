@@ -2,6 +2,8 @@
 ContentForge — Application Configuration
 Loads settings from .env file and environment variables.
 """
+import os
+
 from pydantic_settings import BaseSettings
 from pathlib import Path
 
@@ -42,3 +44,11 @@ class Settings(BaseSettings):
 
 # Singleton
 settings = Settings()
+
+# Vercel's function filesystem is read-only except /tmp, so the relative SQLite
+# default cannot even be created there. Only steps in when nothing else was
+# configured — a DATABASE_URL (Neon, etc.) always wins. Note /tmp is private to
+# each function instance and wiped on cold start; it keeps the app up, but a
+# shared database is what makes an n8n callback land where the run was made.
+if os.environ.get("VERCEL") and settings.database_url == "sqlite:///contentforge.db":
+    settings.database_url = "sqlite:////tmp/contentforge.db"

@@ -31,8 +31,10 @@ Working and verified end to end: login guard, dashboard counters, a demo run wal
 including compliance flags, and both live failure paths.
 
 Not done: the in-process GPT-4o engine in `app/engine/` is unused by the dashboard;
-the calendar has no way to add entries; there are no automated tests. Nothing has
-been pushed to GitHub (github.com/mendoza0123 is the intended remote).
+the calendar has no way to add entries; there are no automated tests.
+
+Repo: github.com/mendoza0123/contentforge (`main`). Hosted on Vercel; a Render
+blueprint (`render.yaml`) also works. See "Hosting" below.
 
 ## What this project is
 Multi-tenant SEO/AEO/GEO content generation engine (SaaS). Brands configure their
@@ -49,22 +51,45 @@ and email newsletters grounded in the brand's voice and compliance rules.
 ## The two run modes
 `app/demo.py` owns both. Picked per run on the New Content form.
 
-- **demo** — a seeded run walks the pipeline in ~11s on a background thread and writes
-  stored content. Works offline; a pitch never stalls on an API.
-- **live** — POSTs to `Brand.n8n_webhook_url` and waits for n8n's
-  `Publish → Webhook` node to call `POST /api/v1/webhook/n8n-result`, which flips the
-  request to `done`. Falls back to demo when no webhook is configured.
+- **demo** — the seeded result is stored at submit. The run panel animates an ~11s
+  pipeline walk on the clock, and `demo.settle` advances the row and flips it to
+  `done` on read. Nothing runs in the background, so it completes on a serverless
+  host too. Works offline; a pitch never stalls on an API.
+- **live** — POSTs to `Brand.n8n_webhook_url` inside the request (8s timeout; n8n
+  acks instantly), then waits for n8n's `Publish → Webhook (ContentForge)` node to
+  call `POST /api/v1/webhook/n8n-result`, which flips the request to `done`. Falls
+  back to demo when no webhook is configured.
+
+There is deliberately no thread anywhere in the run path: a serverless function is
+frozen the moment it responds, so deferred work never happens.
 
 Live gotchas, all handled in code:
-- n8n routes on `publish_target`, and only its **Webhook** branch calls back — so our
-  "Draft only" is sent as `Webhook` (see `demo.PUBLISH_TARGETS`). WordPress and
-  Shopify publish at n8n's end and never report back.
-- A live run with no callback after 15 minutes is failed by `demo.settle_if_stale`
-  rather than spinning forever.
+- n8n routes on `publish_target`. Our "Draft only" is sent as `Webhook` (see
+  `demo.PUBLISH_TARGETS`) because that branch ends in the callback node. WordPress
+  and Shopify publish at n8n's end; wire those nodes into the callback node as well
+  and the viewer shows a "Published to WordPress" banner with the live post link.
+- A live run with no callback after 15 minutes is failed by `demo.settle` rather
+  than spinning forever.
+- A callback whose request row is gone (the host restarted mid-run) rebuilds the
+  row from the payload, so a finished run is never silently dropped.
 - n8n emits `PENDING_REVIEW` / `NEEDS_FIX`; `api._normalize_status` maps those onto
   the `draft` / `needs_fix` lifecycle the models and templates use.
 - `demo.build_payload` matches the webhook's *Normalize Inputs* node field for field
   — note `word_count` goes as a `"1200-1800"` **string**.
+
+## Hosting
+- **Vercel** — zero config; `app/main.py` exposing `app` is a recognised entrypoint.
+  The filesystem is read-only except `/tmp`, and `/tmp` is private to each function
+  instance and wiped on cold start, so set `DATABASE_URL` to a Postgres URL (Neon)
+  — otherwise an n8n callback can land on an instance that never saw the run.
+  `app/config.py` falls back to `/tmp` SQLite only when nothing is configured.
+- **Render** — `render.yaml`; free tier sleeps after 15 min idle (~50s to wake).
+- Startup goes through `main._ensure_ready()`, not only the lifespan: Vercel never
+  sends lifespan events. It creates tables, the brand + admin, and the catalogue if
+  the brand has no runs.
+- The n8n callback node must POST to `https://<host>/api/v1/webhook/n8n-result` with
+  JSON body `{{ JSON.stringify($('Assemble & Validate').item.json) }}` — a bare
+  `{{ $json }}` in a JSON body field becomes the text `[object Object]`.
 
 ## Key files
 - `PROMPT.md` — session kickoff brief

@@ -20,20 +20,35 @@ from app.auth import hash_password
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: init DB, create tables
+    _ensure_ready()
+    yield
+    app.state.engine.dispose()
+
+
+def _ensure_ready() -> None:
+    """Initialise the database exactly once, lifespan or not.
+
+    Vercel calls the ASGI app per request and never sends lifespan events, so
+    startup work that lives only in `lifespan` never runs there and the first
+    request dies on a missing app.state. Every entry point funnels through
+    here instead; it is idempotent, so the lifespan and a cold request agree.
+    """
+    if getattr(app.state, "SessionLocal", None) is not None:
+        return
+
     engine = init_db(settings.database_url)
     app.state.engine = engine
     app.state.SessionLocal = get_session(engine)
     print(f"✅ Database initialized: {settings.database_url}")
 
-    # Create default admin user + AIS brand if not exists
+    # Default brand + admin, then the finished catalogue if the brand has no
+    # runs yet — a fresh database opens pitch-ready instead of on an empty
+    # state, and on a serverless host a fresh database is every cold start.
     _seed_database(app.state.SessionLocal())
+    from scripts.seed_demo import seed_catalogue_if_empty
+
+    seed_catalogue_if_empty(app.state.SessionLocal())
     print("✅ Seed data checked")
-
-    yield
-
-    # Shutdown
-    engine.dispose()
 
 
 def _seed_database(db: Session):
@@ -165,6 +180,7 @@ templates = Jinja2Templates(directory=template_dir)
 
 def get_db():
     """FastAPI dependency: yield a database session."""
+    _ensure_ready()
     db = app.state.SessionLocal()
     try:
         yield db

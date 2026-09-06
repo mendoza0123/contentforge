@@ -15,19 +15,11 @@ rows), so the viewer doesn't care which one produced the content.
 """
 import json
 import re
-import threading
 from datetime import datetime, timezone
 
 import httpx
 
-from app.config import settings
-from app.models import (
-    ContentRequest,
-    GeneratedContent,
-    get_engine,
-    get_session,
-    utcnow,
-)
+from app.models import ContentRequest, GeneratedContent, utcnow
 
 # ═══════════════════════════════════════════════════════════════
 # Pipeline shape — mirrors the 7 OpenAI passes in the n8n workflow
@@ -76,9 +68,9 @@ LIVE_CAPTION = {
 # rather than spinning forever.
 LIVE_TIMEOUT = 900.0
 LIVE_TIMEOUT_MESSAGE = (
-    "n8n never called back. Check the run in n8n — and note that only the "
-    "'Webhook' publish branch reports back to ContentForge; a run published "
-    "straight to WordPress or Shopify finishes there instead."
+    "n8n never called back. Check the run in n8n: whichever publish branch it "
+    "took has to end in the 'Publish → Webhook (ContentForge)' node, and that "
+    "node has to POST to this app's /api/v1/webhook/n8n-result."
 )
 
 
@@ -96,13 +88,36 @@ def _elapsed(cr: ContentRequest) -> float:
     return max(0.0, (datetime.now(timezone.utc) - created).total_seconds())
 
 
-def settle_if_stale(db, cr: ContentRequest) -> bool:
-    """Fail a live run whose callback never arrived. True if it changed."""
-    if cr.status in SETTLED or (cr.run_mode or "demo") != "live":
-        return False
-    if _elapsed(cr) < LIVE_TIMEOUT:
+def settle(db, cr: ContentRequest) -> bool:
+    """Bring a run's status up to date on read. True if it changed.
+
+    A demo run finishes on the clock: its result was stored at submit, and the
+    row walks the timeline and flips to done as the panel is polled. Nothing
+    runs in the background, so a host that freezes the process between
+    requests — any serverless function — still sees the run complete.
+
+    A live run is failed once n8n has had 15 minutes and never called back.
+    """
+    if cr.status in SETTLED:
         return False
 
+    elapsed = _elapsed(cr)
+
+    if (cr.run_mode or "demo") == "demo":
+        stage = "pending"
+        for at, status, _caption in DEMO_TIMELINE:
+            if elapsed >= at:
+                stage = status
+        if stage == cr.status:
+            return False
+        cr.status = stage
+        if stage == "done":
+            cr.completed_at = utcnow()
+        db.commit()
+        return True
+
+    if elapsed < LIVE_TIMEOUT:
+        return False
     cr.status = "failed"
     cr.error_message = LIVE_TIMEOUT_MESSAGE
     db.commit()
@@ -216,108 +231,47 @@ def build_payload(brand, cr: ContentRequest) -> dict:
 # Run dispatch
 # ═══════════════════════════════════════════════════════════════
 
-_engine = None
-_engine_lock = threading.Lock()
+# n8n's first node is "Ack (respond now)", so a healthy dispatch returns in
+# well under a second. Anything slower is a problem worth reporting, and a
+# serverless function has only seconds before the platform kills it.
+DISPATCH_TIMEOUT = 8.0
 
 
-def _session():
-    """Session for background threads — the request-scoped one is long gone."""
-    global _engine
-    with _engine_lock:
-        if _engine is None:
-            _engine = get_engine(settings.database_url)
-    return get_session(_engine)()
+def start_run(db, cr: ContentRequest, brand) -> None:
+    """Dispatch a run inside the request that created it.
 
-
-def start_run(cr: ContentRequest, brand) -> None:
-    """Kick off a run. Returns immediately; the work happens on a thread."""
+    Nothing is handed to a thread. A serverless function is frozen the moment
+    it responds, so work deferred past the response simply never happens —
+    the POST to n8n would not go out, the demo would never finish.
+    """
     if (cr.run_mode or "demo") == "live":
-        payload = build_payload(brand, cr)
-        url = brand.n8n_webhook_url if brand else None
-        threading.Thread(
-            target=_live_worker,
-            args=(cr.request_id, url, payload),
-            daemon=True,
-        ).start()
+        _dispatch_live(db, cr, brand)
     else:
-        threading.Thread(
-            target=_demo_worker,
-            args=(cr.request_id, brand.id if brand else 1),
-            daemon=True,
-        ).start()
+        # The stored result is written now. The pipeline walk the panel shows
+        # is drawn from elapsed time, and settle() advances the row on read.
+        seed_items(db, cr, brand.id if brand else 1)
+    db.commit()
 
 
-def _live_worker(request_id: str, url: str, payload: dict) -> None:
-    """POST to n8n. n8n acks immediately, then calls us back when it's done."""
-    db = _session()
+def _dispatch_live(db, cr: ContentRequest, brand) -> None:
+    """POST to n8n. It acks immediately, then calls us back when it's done."""
+    url = brand.n8n_webhook_url if brand else None
+    if not url:
+        cr.status = "failed"
+        cr.error_message = "No n8n webhook URL is set for this brand."
+        return
+
     try:
-        cr = db.query(ContentRequest).filter(
-            ContentRequest.request_id == request_id
-        ).first()
-        if not cr:
-            return
-        if not url:
-            cr.status = "failed"
-            cr.error_message = "No n8n webhook URL is set for this brand."
-            db.commit()
-            return
+        resp = httpx.post(url, json=build_payload(brand, cr), timeout=DISPATCH_TIMEOUT)
+        resp.raise_for_status()
+    except Exception as exc:
+        cr.status = "failed"
+        cr.error_message = f"Could not reach n8n: {exc}"
+        print(f"   ❌ n8n dispatch failed for {cr.request_id}: {exc}")
+        return
 
-        try:
-            resp = httpx.post(url, json=payload, timeout=30.0)
-            resp.raise_for_status()
-        except Exception as exc:
-            cr.status = "failed"
-            cr.error_message = f"Could not reach n8n: {exc}"
-            db.commit()
-            print(f"   ❌ n8n dispatch failed for {request_id}: {exc}")
-            return
-
-        cr.status = "researching"
-        db.commit()
-        print(f"   📤 Dispatched {request_id} to n8n ({resp.status_code})")
-    finally:
-        db.close()
-
-
-def _demo_worker(request_id: str, brand_id: int) -> None:
-    """Walk the seeded run through the pipeline, then write the stored result."""
-    import time
-
-    db = _session()
-    try:
-        for i, (at, status, _caption) in enumerate(DEMO_TIMELINE):
-            if i > 0:
-                time.sleep(at - DEMO_TIMELINE[i - 1][0])
-
-            cr = db.query(ContentRequest).filter(
-                ContentRequest.request_id == request_id
-            ).first()
-            if not cr or cr.status == "failed":
-                return
-
-            if status == "done":
-                seed_items(db, cr, brand_id)
-                cr.status = "done"
-                cr.completed_at = utcnow()
-            else:
-                cr.status = status
-            db.commit()
-
-        print(f"   ✅ Demo run complete: {request_id}")
-    except Exception as exc:  # a demo that dies silently is worse than one that says so
-        print(f"   ❌ Demo run failed for {request_id}: {exc}")
-        try:
-            cr = db.query(ContentRequest).filter(
-                ContentRequest.request_id == request_id
-            ).first()
-            if cr:
-                cr.status = "failed"
-                cr.error_message = str(exc)
-                db.commit()
-        except Exception:
-            pass
-    finally:
-        db.close()
+    cr.status = "researching"
+    print(f"   📤 Dispatched {cr.request_id} to n8n ({resp.status_code})")
 
 
 # ═══════════════════════════════════════════════════════════════

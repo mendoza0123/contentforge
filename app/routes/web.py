@@ -126,6 +126,20 @@ def recent_for(brand, db: Session, limit: int = 10):
     return q.order_by(ContentRequest.created_at.desc()).limit(limit).all()
 
 
+def settle_in_flight(brand, db: Session) -> None:
+    """Bring every unfinished run up to date before it is counted or listed.
+
+    Runs advance on read, so a demo submitted and then abandoned would sit at
+    "Queued" in the list until someone opened it. Settling here keeps the
+    dashboard honest and lets the recent list stop polling on its own.
+    """
+    q = db.query(ContentRequest).filter(~ContentRequest.status.in_(demo.SETTLED))
+    if brand:
+        q = q.filter(ContentRequest.brand_id == brand.id)
+    for cr in q.all():
+        demo.settle(db, cr)
+
+
 # ═══════════════════════════════════════════════════════════════
 # Generated-content view model
 # ═══════════════════════════════════════════════════════════════
@@ -271,6 +285,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse("/login", status_code=303)
 
     brand = brand_for(user, db)
+    settle_in_flight(brand, db)
     return render(
         "dashboard.html",
         request,
@@ -375,7 +390,7 @@ def content_new_submit(
     db.commit()
     db.refresh(cr)
 
-    demo.start_run(cr, brand)
+    demo.start_run(db, cr, brand)
 
     return RedirectResponse(f"/content/{cr.request_id}", status_code=303)
 
@@ -392,7 +407,7 @@ def content_view(request: Request, request_id: str, db: Session = Depends(get_db
     if not cr:
         return RedirectResponse("/dashboard", status_code=303)
 
-    demo.settle_if_stale(db, cr)
+    demo.settle(db, cr)
 
     items = (
         db.query(GeneratedContent)
@@ -424,6 +439,7 @@ def partial_recent(request: Request, db: Session = Depends(get_db)):
         return HTMLResponse("", headers={"HX-Redirect": "/login"})
 
     brand = brand_for(user, db)
+    settle_in_flight(brand, db)
     return render(
         "_recent_list.html",
         request,
@@ -446,7 +462,7 @@ def partial_run(request: Request, request_id: str, db: Session = Depends(get_db)
     if not cr:
         return HTMLResponse("", headers={"HX-Refresh": "true"})
 
-    demo.settle_if_stale(db, cr)
+    demo.settle(db, cr)
 
     # Settled: stop polling and let the page reload into the finished article.
     if cr.status in demo.SETTLED:

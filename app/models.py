@@ -22,16 +22,31 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 Base = declarative_base()
 
 
+def normalize_url(database_url: str) -> str:
+    """Name the driver on Postgres URLs.
+
+    Neon and Vercel hand out postgres:// or postgresql:// strings; SQLAlchemy 2
+    needs the driver spelled out, and psycopg (v3) is the one in requirements.
+    """
+    for prefix in ("postgres://", "postgresql://"):
+        if database_url.startswith(prefix):
+            return "postgresql+psycopg://" + database_url[len(prefix):]
+    return database_url
+
+
 def get_engine(database_url: str):
-    """Create SQLAlchemy engine with SQLite-specific settings."""
-    # timeout: run threads hold their own connection, so a background write can
-    # land while a request is writing. Wait rather than throw "database is locked".
-    connect_args = (
-        {"check_same_thread": False, "timeout": 15}
-        if database_url.startswith("sqlite")
-        else {}
-    )
-    return create_engine(database_url, echo=False, connect_args=connect_args)
+    """Create SQLAlchemy engine with per-backend settings."""
+    database_url = normalize_url(database_url)
+    if database_url.startswith("sqlite"):
+        # timeout: wait on a locked file rather than throw "database is locked".
+        return create_engine(
+            database_url,
+            echo=False,
+            connect_args={"check_same_thread": False, "timeout": 15},
+        )
+    # A serverless function is frozen between requests and its pooled
+    # connections go stale; pre-ping swaps a dead one instead of erroring.
+    return create_engine(database_url, echo=False, pool_pre_ping=True)
 
 
 def get_session(engine):
